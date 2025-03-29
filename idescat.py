@@ -2,8 +2,8 @@ import requests
 
 
 
-url = f'https://api.idescat.cat/emex/v1/dades.json?id={node_id}'
-url = f'https://api.idescat.cat/emex/v1/nodes.json'
+# url = f'https://api.idescat.cat/emex/v1/dades.json?id={node_id}'
+# url = f'https://api.idescat.cat/emex/v1/nodes.json'
 
 
 
