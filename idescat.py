@@ -1,5 +1,7 @@
 import requests
 
+
+
 url = f'https://api.idescat.cat/emex/v1/dades.json?id={node_id}'
 url = f'https://api.idescat.cat/emex/v1/nodes.json'
 
@@ -27,4 +29,11 @@ class IdesCat:
 		response = requests.get(url)
 		print(response.status_code)
 		return response.json()
+	
+	def get_comarques(self):
+		"""
+		Get the list of comarques (counties) from the IdesCat API.
+		"""
+		comarques = idescat.get_nodes()['fitxes']['v']['v']
+
 	
