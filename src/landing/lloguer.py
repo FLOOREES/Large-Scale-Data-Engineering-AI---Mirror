@@ -2,8 +2,7 @@ import requests
 import pandas as pd
 import time
 import logging
-import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import pyarrow # Ensure pyarrow is available
 
 # --- Configuration ---
@@ -16,38 +15,12 @@ logger = logging.getLogger(__name__)
 
 # --- Data Collector Class ---
 class Lloguer:
-    """
-    Collects paginated rent data from an API and saves it to a Parquet file,
-    overwriting any existing file. Uses Pandas and PyArrow.
-    Relies on standard exceptions for error handling.
-    """
-
-    def __init__(self,
-                 api_url: str ,
-                 output_parquet_path: str,
-                 request_limit: int = 1000,
-                 request_delay: float = 0.5,
-                 timeout: int = 30):
-        """
-        Initializes the Lloguer data collector.
-
-        Args:
-            api_url (str): The base URL of the API endpoint.
-            output_parquet_path (str): Path for the output Parquet file.
-            request_limit (int): Records per API call ($limit).
-            request_delay (float): Delay between API calls (seconds).
-            timeout (int): HTTP request timeout (seconds).
-        """
-        if not api_url or not output_parquet_path:
-            raise ValueError("API URL and output path cannot be empty.")
-        if request_limit <= 0 or request_delay < 0 or timeout <= 0:
-            raise ValueError("Request limit/timeout must be positive. Delay cannot be negative.")
-
-        self.api_url = api_url
-        self.output_parquet_path = output_parquet_path
-        self.request_limit = request_limit
-        self.request_delay = request_delay
-        self.timeout = timeout
+    def __init__(self):
+        self.api_url = "https://analisi.transparenciacatalunya.cat/resource/qww9-bvhh.json"
+        self.output_parquet_path = "./data/landing/lloguer_catalunya.parquet"
+        self.request_limit = 1000
+        self.request_delay = 0.5
+        self.timeout = 60
 
         logger.info(f"Lloguer initialized:")
         logger.info(f"  API URL: {self.api_url}")
@@ -138,11 +111,6 @@ class Lloguer:
                 logger.warning("Created DataFrame is empty. Skipping Parquet save.")
                 return
 
-            output_dir = os.path.dirname(self.output_parquet_path)
-            if output_dir and not os.path.exists(output_dir):
-                 logger.info(f"Creating output directory: {output_dir}")
-                 os.makedirs(output_dir, exist_ok=True)
-
             logger.info(f"Writing {len(df)} records using engine 'pyarrow'...")
             start_time = time.time()
             df.to_parquet(self.output_parquet_path, engine='pyarrow', index=False)
@@ -159,12 +127,14 @@ class Lloguer:
              logger.error(f"An unexpected error occurred during Parquet save: {e}", exc_info=True)
              raise
 
-    def run(self):
+    def run(self, mode: str = "overwrite"):
         """
         Executes the full pipeline: fetch all data and save (overwrite).
         Logs results or errors. Does not return a value.
         Raises exceptions on failure.
         """
+        assert mode in ["overwrite", "append"], "Invalid mode. Use 'overwrite' or 'append'."
+        
         logger.info(f"--- Starting Lloguer Run ---")
         try:
             fetched_data = self.fetch_all_data()
@@ -179,36 +149,3 @@ class Lloguer:
             # Specific errors logged in fetch/save methods. This catches the failure.
             logger.error(f"--- Lloguer Run Failed. See previous logs for error details. ---", exc_info=False) # Avoid duplicate traceback if already logged
             raise # Re-raise the exception to signal failure to the caller
-
-
-# --- Main Execution Block ---
-if __name__ == "__main__":
-
-    # --- Configuration ---
-    API_URL = "https://analisi.transparenciacatalunya.cat/resource/qww9-bvhh.json"
-    OUTPUT_DIR = "./data/landing/"
-    OUTPUT_FILENAME = "lloguer_catalunya.parquet"
-    OUTPUT_PARQUET_PATH = os.path.join(OUTPUT_DIR, OUTPUT_FILENAME)
-
-    # API Parameters
-    REQUEST_LIMIT = 1000
-    REQUEST_DELAY = 0.5
-    TIMEOUT = 60
-    logger.info("--- Initializing Lloguer Data Collection ---")
-
-    try:
-        # Initialize Collector
-        collector = Lloguer(api_url=API_URL,output_parquet_path=OUTPUT_PARQUET_PATH,request_limit=REQUEST_LIMIT,request_delay=REQUEST_DELAY,timeout=TIMEOUT)
-        collector.run()
-        logger.info("--- Script finished successfully. ---")
-
-
-    except ValueError as config_err:
-        # Error during initialization
-        logger.error(f"Initialization failed due to configuration error: {config_err}", exc_info=True)
-    except Exception as e:
-        # Catch any exception raised during collector.run()
-        logger.error(f"Script execution failed during the run phase.", exc_info=True) # Log exception info here
-
-    finally:
-        logger.info("--- Lloguer Script Execution Attempt Finished ---")

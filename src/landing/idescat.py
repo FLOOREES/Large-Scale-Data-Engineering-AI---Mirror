@@ -2,59 +2,45 @@
 
 import requests
 import json
-import time
 import pandas as pd
-from pathlib import Path
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from typing import List, Dict, Optional, Any
 
-class IdescatLandingZone:
+class Idescat:
     """
     Handles fetching selected Idescat EMEX indicators for all municipalities
     and saving the results to the landing zone in Parquet format.
     """
+    DEFAULT_MAX_WORKERS = 10 
 
-    # --- Default Configuration ---
-    DEFAULT_API_BASE_URL = "https://api.idescat.cat/emex/v1"
-    DEFAULT_MAX_WORKERS = 10 # Using the safer limit decided previously
-    DEFAULT_TIMEOUT = 20     # API request timeout in seconds
-
-    def __init__(self,
-                 chosen_indicators: List[str],
-                 landing_dir: str or Path,
-                 api_base_url: str = DEFAULT_API_BASE_URL,
-                 max_workers: int = DEFAULT_MAX_WORKERS,
-                 timeout: int = DEFAULT_TIMEOUT):
-        """
-        Initializes the IdescatLandingZone processor.
-
-        Args:
-            chosen_indicators: List of Idescat indicator IDs (e.g., ['f171', 'f36']).
-            landing_dir: The base directory for the landing zone output.
-            api_base_url: The base URL for the Idescat EMEX API.
-            max_workers: Maximum number of parallel workers for API calls.
-            timeout: Timeout for individual API requests in seconds.
-        """
-        if not chosen_indicators:
-            raise ValueError("chosen_indicators list cannot be empty.")
-
-        self.chosen_indicators = chosen_indicators
+    def __init__(self, max_workers: int = DEFAULT_MAX_WORKERS):
+        self.chosen_indicators = [
+            'f171', # Population
+            'f36',  # Men
+            'f42',  # Women
+            'f187', # Births (Total)
+            'f183', # Pop. Spanish Nationality
+            'f261', # Surface area (km²)
+            'f262', # Density (Pop/km²)
+            'f328', # Longitude
+            'f329', # Latitude
+            'f308', # Total Registered Unemployment
+            'f191', # Habitatges familiars
+            'f270', # Biblioteques públiques
+            'f293', # Pavellons
+            'f294', # Pistes poliesportives
+            'f301', # Piscines cobertes
+        ]
         self.indicators_query_string = ','.join(self.chosen_indicators)
-        self.landing_zone_dir = Path(landing_dir)
-        self.api_base_url = api_base_url
+        self.api_url = "https://api.idescat.cat/emex/v1"
         self.max_workers = max_workers
-        self.timeout = timeout
-
-        # Ensure landing directory exists
-        self.landing_zone_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Idescat Landing Zone initialized. Output directory: {self.landing_zone_dir}")
+        self.timeout = 20
 
     def _get_all_municipality_ids(self) -> List[str]:
         """Fetches the list of all municipality IDs from the Idescat API."""
         print("Fetching list of all municipalities...")
-        nodes_url = f"{self.api_base_url}/nodes.json?tipus=mun"
+        nodes_url = f"{self.api_url}/nodes.json?tipus=mun"
         try:
             response = requests.get(nodes_url, timeout=self.timeout)
             response.raise_for_status()
@@ -98,7 +84,7 @@ class IdescatLandingZone:
         Fetches chosen indicators for a single municipality (thread-safe)
         and includes municipality and comarca names. Returns a list of dicts.
         """
-        data_url = f"{self.api_base_url}/dades.json?id={municipality_id}&i={self.indicators_query_string}"
+        data_url = f"{self.api_url}/dades.json?id={municipality_id}&i={self.indicators_query_string}"
         try:
             response = requests.get(data_url, timeout=self.timeout)
             response.raise_for_status()
@@ -193,13 +179,9 @@ class IdescatLandingZone:
         existing_columns = [col for col in desired_order if col in df_landing.columns]
         df_landing = df_landing[existing_columns]
 
-        # --- File Saving ---
-        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_filename = f"idescat_emex_indicators_{timestamp_str}"
-
         # Optional CSV Saving
         if save_csv:
-            csv_output_path = self.landing_zone_dir / f"{base_filename}.csv"
+            csv_output_path = "/data/landing/idescat.csv"
             try:
                 df_landing.to_csv(csv_output_path, index=False, encoding='utf-8-sig')
                 print(f"Successfully saved landing data to CSV: {csv_output_path}")
@@ -207,7 +189,7 @@ class IdescatLandingZone:
                 print(f"Error saving DataFrame to CSV file {csv_output_path}: {e}")
 
         # Save to Parquet (Primary Format)
-        parquet_output_path = self.landing_zone_dir / f"{base_filename}.parquet"
+        parquet_output_path = "/data/landing/idescat.parquet"
         try:
             df_landing.to_parquet(parquet_output_path, index=False, engine='pyarrow')
             print(f"Successfully saved landing data to PARQUET: {parquet_output_path}")
@@ -259,44 +241,3 @@ class IdescatLandingZone:
         self._process_and_save_data(all_data_for_landing, save_csv)
 
         print("\n--- Idescat Landing Zone Task Complete ---")
-
-
-# --- Main Execution Block ---
-if __name__ == "__main__":
-
-    # Define chosen indicators and landing directory here for direct execution
-    INDICATORS = [
-        'f171', # Population
-        'f36',  # Men
-        'f42',  # Women
-        'f187', # Births (Total)
-        'f183', # Pop. Spanish Nationality
-        'f261', # Surface area (km²)
-        'f262', # Density (Pop/km²)
-        'f328', # Longitude
-        'f329', # Latitude
-        'f308', # Total Registered Unemployment
-        'f191', # Habitatges familiars
-        'f270', # Biblioteques públiques
-        'f293', # Pavellons
-        'f294', # Pistes poliesportives
-        'f301', # Piscines cobertes
-    ]
-    LANDING_DIR = "././data/landing/idescat_emex" # Relative path
-
-    try:
-        # Instantiate the class
-        idescat_processor = IdescatLandingZone(
-            chosen_indicators=INDICATORS,
-            landing_dir=LANDING_DIR
-            # Can override max_workers, timeout etc. here if needed:
-            # max_workers=15
-        )
-
-        # Run the process, requesting a CSV output as well for this specific run
-        idescat_processor.run(save_csv=True)
-
-    except ValueError as ve:
-        print(f"Configuration Error: {ve}")
-    except Exception as e:
-        print(f"An unexpected error occurred in the main execution block: {e}")

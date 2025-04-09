@@ -10,12 +10,12 @@ class RFDBC:
     """
     def __init__(self) -> None:
         # URL for specific table: RFDB i RFDB per habitant. Municipis. 2010-2021.
-        self.url = "https://api.idescat.cat/taules/v2/rfdbc/13301/14148/mun/data"
+        self.api_url = "https://api.idescat.cat/taules/v2/rfdbc/13301/14148/mun/data"
 
-    def get_data(self):
+    def fetch_data(self):
         """Fetches data from the API."""
         try:
-            response = requests.get(self.url)
+            response = requests.get(self.api_url)
             response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -151,7 +151,7 @@ class RFDBC:
         """
         Main method to fetch, transform, and save data.
         """
-        raw_api_data = self.get_data()
+        raw_api_data = self.fetch_data()
         if raw_api_data:
             self.to_parquet(raw_api_data, output_path)
         else:
