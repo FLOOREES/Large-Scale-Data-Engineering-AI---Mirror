@@ -1,26 +1,10 @@
 import requests
+import pandas as pd # Import pandas
 import time
 import logging
 import os
 from typing import List, Dict, Any, Optional
-
-# Import Spark specific components
-try:
-    from pyspark.sql import SparkSession, Row
-    from pyspark.sql.utils import AnalysisException
-    from pyspark.errors import PySparkException
-except ImportError:
-    print("---------------------------------------------------------------------")
-    print("ERROR: PySpark is not installed or cannot be found.")
-    print("Please install PySpark using 'pip install pyspark'")
-    print("Ensure Spark is correctly configured in your environment (SPARK_HOME).")
-    print("---------------------------------------------------------------------")
-    # You might want to exit here depending on how the script is run
-    # import sys
-    # sys.exit(1)
-    # For now, let the rest of the script potentially fail later if Spark is used
-    SparkSession = None # Define as None to avoid NameError later if not imported
-
+import pyarrow # Explicit import sometimes helps environments
 
 # --- Configuration ---
 logging.basicConfig(
@@ -30,6 +14,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# --- Custom Error Classes ---
 class LloguerError(Exception):
     """
     Custom base exception for errors specific to the Lloguer data collection
@@ -37,33 +22,59 @@ class LloguerError(Exception):
     generic Python or library errors.
     """
     def __init__(self, message: str, underlying_exception: Optional[Exception] = None):
+        super().__init__(message)
+        self.underlying_exception = underlying_exception
+        # Log creation slightly differently for clarity
+        log_msg = f"LloguerError: {message}"
+        if underlying_exception:
+            log_msg += f" (Caused by: {type(underlying_exception).__name__}: {underlying_exception})"
+        logger.debug(log_msg) # Keep debug level for creation event
+
+    def __str__(self) -> str:
+        base_message = super().__str__()
+        if self.underlying_exception:
+            # Include exception details in __str__ for easier debugging when caught
+            return f"{base_message} (Caused by: {type(self.underlying_exception).__name__}: {self.underlying_exception})"
+        return base_message
+
+class ReaderError(Exception):
+    """
+    Custom exception for errors specific to the ParquetReader class.
+    Indicates issues during file reading or validation.
+    """
+    def __init__(self, message: str, underlying_exception: Optional[Exception] = None):
         """
-        Initializes the LloguerError.
+        Initializes the ReaderError.
 
         Args:
             message (str): A descriptive error message.
-            underlying_exception (Optional[Exception]): The original exception that
-                                                      caused this error, if any.
-                                                      Useful for debugging.
+            underlying_exception (Optional[Exception]): The original exception
+                                                      that triggered this error, if any.
         """
         super().__init__(message)
         self.underlying_exception = underlying_exception
-        logger.debug(f"LloguerError created: {message} (Underlying: {type(underlying_exception).__name__ if underlying_exception else 'None'})")
+        # Log creation slightly differently for clarity
+        log_msg = f"ReaderError: {message}"
+        if underlying_exception:
+            log_msg += f" (Caused by: {type(underlying_exception).__name__}: {underlying_exception})"
+        logger.debug(log_msg) # Keep debug level for creation event
+
 
     def __str__(self) -> str:
-        """Provides a string representation including the underlying exception type."""
         base_message = super().__str__()
         if self.underlying_exception:
-            return f"{base_message} (Caused by: {type(self.underlying_exception).__name__})"
+             # Include exception details in __str__ for easier debugging when caught
+            return f"{base_message} (Caused by: {type(self.underlying_exception).__name__}: {self.underlying_exception})"
         return base_message
 
-
+# --- Data Collector Class ---
 class Lloguer:
     """
     Collects data from a paginated API endpoint ('Lloguer' - Rent data)
-    and saves it to a Parquet file using Apache Spark.
+    and saves it to a Parquet file using Pandas.
 
-    Handles periodic execution by supporting Spark's 'overwrite' and 'append' modes.
+    Handles periodic execution by supporting 'overwrite' and 'append' modes.
+    Requires `pandas` and `pyarrow` libraries.
     """
 
     def __init__(self,
@@ -71,13 +82,14 @@ class Lloguer:
                  output_parquet_path: str,
                  request_limit: int,
                  request_delay: float,
-                 timeout: int):
+                 timeout: int,
+                 logger: Optional[logging.Logger] = None):
         """
         Initializes the Lloguer data collector.
 
         Args:
             api_url (str): The base URL of the API endpoint.
-            output_parquet_path (str): The HDFS/S3/local path for the output Parquet data.
+            output_parquet_path (str): The local file system path for the output Parquet file.
             request_limit (int): The number of records to request per API call ($limit).
             request_delay (float): The delay in seconds between consecutive API calls.
             timeout (int): Timeout in seconds for the HTTP request.
@@ -94,15 +106,16 @@ class Lloguer:
             raise ValueError("Timeout must be positive.")
 
         self.api_url = api_url
-        # Spark handles paths (local, hdfs://, s3a:// etc.)
         self.output_parquet_path = output_parquet_path
         self.request_limit = request_limit
         self.request_delay = request_delay
         self.timeout = timeout
+        self.logger = logger or logging.getLogger(__name__)
+        self.last_fetch_count = 0 # Store count of last fetch
 
-        logger.info(f"Lloguer collector initialized for API: {self.api_url}")
-        logger.info(f"Output path (for Spark): {self.output_parquet_path}")
-        logger.info(f"Request limit: {self.request_limit}, Delay: {self.request_delay}s")
+        self.logger.info(f"Lloguer collector initialized for API: {self.api_url}")
+        self.logger.info(f"Output path (for Parquet): {self.output_parquet_path}") # Updated log
+        self.logger.info(f"Request limit: {self.request_limit}, Delay: {self.request_delay}s")
 
     def _fetch_data_page(self, offset: int) -> Optional[List[Dict[str, Any]]]:
         """Fetches a single page of data from the API."""
@@ -112,25 +125,37 @@ class Lloguer:
         }
         try:
             response = requests.get(self.api_url, params=params, timeout=self.timeout)
-            response.raise_for_status()  # Raises HTTPError for bad responses (4xx or 5xx)
+            response.raise_for_status() # Raises HTTPError for bad responses (4xx or 5xx)
+            # Check for empty or non-JSON response before decoding
+            if not response.content:
+                logger.warning(f"Received empty response body for offset {offset}. Assuming end of data.")
+                return None
             return response.json()
         except requests.exceptions.Timeout as e:
             msg = f"Request timed out after {self.timeout} seconds for offset {offset}."
-            logger.error(msg)
+            self.logger.error(msg)
             raise LloguerError(msg, underlying_exception=e) from e
         except requests.exceptions.HTTPError as e:
-            msg = f"HTTP error occurred: {e} (Status: {response.status_code}) for offset {offset}"
-            logger.error(msg)
+            # Log response body if available and not too large for debugging
+            response_body_excerpt = ""
+            if e.response is not None and e.response.content:
+                 response_body_excerpt = e.response.content[:200].decode('utf-8', errors='ignore') # Show first 200 chars
+            msg = f"HTTP error occurred: {e} (Status: {e.response.status_code}) for offset {offset}. Response excerpt: '{response_body_excerpt}...'"
+            self.logger.error(msg)
             raise LloguerError(msg, underlying_exception=e) from e
         except requests.exceptions.RequestException as e:
             msg = f"Network error during request for offset {offset}: {e}"
-            logger.error(msg)
+            self.logger.error(msg)
             raise LloguerError(msg, underlying_exception=e) from e
         except ValueError as e: # Includes json.JSONDecodeError
-             msg = f"Error decoding JSON response for offset {offset}: {e}"
-             logger.error(msg)
+             msg = f"Error decoding JSON response for offset {offset}. Response might not be valid JSON. Error: {e}"
+             self.logger.error(msg)
+             # Optionally log response text here too for debugging JSON errors
+             try:
+                 self.logger.debug(f"Response text causing JSON decode error (offset {offset}): {response.text[:500]}...") # Log beginning of text
+             except Exception: # Ignore errors during logging the problematic text
+                 pass
              raise LloguerError(msg, underlying_exception=e) from e
-
 
     def fetch_all_data(self) -> List[Dict[str, Any]]:
         """
@@ -144,226 +169,473 @@ class Lloguer:
         """
         all_records = []
         offset = 0
-        logger.info("Starting data fetch process...")
+        self.logger.info("Starting data fetch process...")
 
         while True:
-            logger.debug(f"Fetching data page with offset: {offset}")
+            self.logger.debug(f"Fetching data page with offset: {offset}")
             try:
                 data_page = self._fetch_data_page(offset)
             except LloguerError as e:
-                # Log the error but re-raise it as the fetch failed
-                logger.error(f"Failed to fetch page at offset {offset}. Aborting fetch. Error: {e}")
+                self.logger.error(f"Failed to fetch page at offset {offset}. Aborting fetch. Error: {e}")
                 raise # Re-raise the specific LloguerError
 
+            # Handle case where _fetch_data_page returns None (e.g., empty response body)
+            if data_page is None:
+                self.logger.info(f"Received None or empty response for page at offset {offset}. Assuming end of data.")
+                break
+
+            # Handle case where API returns empty list explicitly
             if not data_page:
-                logger.info("No more data received from API. Fetch complete.")
+                self.logger.info(f"Received empty list from API at offset {offset}. Fetch complete.")
                 break
 
             page_record_count = len(data_page)
             all_records.extend(data_page)
-            logger.info(f"Fetched {page_record_count} records (offset={offset}). Total records so far: {len(all_records)}")
+            self.logger.info(f"Fetched {page_record_count} records (offset={offset}). Total records so far: {len(all_records)}")
 
-            # Stop if we received fewer records than the limit, indicating the last page
+            # Check if the last page was received
             if page_record_count < self.request_limit:
-                 logger.info("Received fewer records than limit, assuming end of data.")
+                 self.logger.info(f"Received {page_record_count} records, which is less than the limit ({self.request_limit}). Assuming end of data.")
                  break
 
             offset += self.request_limit
 
-            # Respectful delay
             if self.request_delay > 0:
-                logger.debug(f"Waiting for {self.request_delay} seconds before next request.")
+                self.logger.debug(f"Waiting for {self.request_delay} seconds before next request.")
                 time.sleep(self.request_delay)
 
-        logger.info(f"Finished data fetch. Total records downloaded: {len(all_records)}")
+        self.last_fetch_count = len(all_records) # Store the count
+        self.logger.info(f"Finished data fetch. Total records downloaded: {self.last_fetch_count}")
         return all_records
 
-    def save_to_spark_parquet(self, spark: SparkSession, data: List[Dict[str, Any]], mode: str = 'overwrite'): # type: ignore
+    def save_to_parquet(self, data: List[Dict[str, Any]], mode: str = 'overwrite'):
         """
-        Saves the collected data to a Parquet file/directory using Spark.
+        Saves the collected data to a Parquet file using Pandas.
 
         Args:
-            spark (SparkSession): The active SparkSession.
             data (List[Dict[str, Any]]): The data to save (list of dictionaries).
-            mode (str): The Spark save mode. Typically 'overwrite' or 'append'.
-                        Other options include 'ignore', 'errorifexists'.
+            mode (str): The save mode. Options:
+                        'overwrite': Overwrites the file if it exists.
+                        'append': Reads the existing file (if any), appends new data,
+                                  and overwrites the file with the combined data.
 
         Raises:
-            ValueError: If the mode is invalid or data is empty/None, or SparkSession is missing.
-            LloguerError: If any Spark-related error occurs during saving.
-            PySparkException: Can be raised from Spark operations.
+            ValueError: If the mode is invalid or data is empty/None.
+            LloguerError: If any error occurs during saving (I/O, Pandas, PyArrow).
+            FileNotFoundError: If mode is 'append' and the file needs reading but doesn't exist (caught internally).
         """
-        if SparkSession is None:
-             raise LloguerError("PySpark is not available. Cannot save data.")
-        if not spark:
-            raise ValueError("A valid SparkSession must be provided.")
-        if not data:
-            logger.warning("No data provided to save. Skipping Spark Parquet save.")
+        if data is None: # Explicitly check for None
+            self.logger.warning("Input data is None. Skipping Parquet save.")
             return
-        if not isinstance(spark, SparkSession):
-             raise ValueError("The provided 'spark' argument is not a SparkSession instance.")
+        if not data:
+            self.logger.warning("No data provided (empty list). Skipping Parquet save.")
+            return
 
-        valid_modes = ['overwrite', 'append', 'ignore', 'error', 'errorifexists']
-        if mode not in valid_modes:
-            raise ValueError(f"Invalid Spark save mode '{mode}'. Choose from: {valid_modes}")
+        if mode not in ['overwrite', 'append']:
+            raise ValueError(f"Invalid save mode '{mode}'. Choose 'overwrite' or 'append'.")
 
-        logger.info(f"Preparing to save {len(data)} records using Spark to {self.output_parquet_path} in '{mode}' mode.")
+        self.logger.info(f"Preparing to save {len(data)} records using Pandas to {self.output_parquet_path} in '{mode}' mode.")
 
         try:
-            # Convert Python list of dicts to Spark DataFrame
-            # Spark will attempt to infer the schema.
-            # For production, providing an explicit schema is more robust.
-            # e.g., using spark.createDataFrame(data, schema=my_schema)
-            # Consider potential performance impact for very large Python lists.
-            start_time = time.time()
-            logger.debug("Creating Spark DataFrame from fetched data...")
-            # Using Row can sometimes help with schema inference consistency
-            # spark_df = spark.createDataFrame(Row(**d) for d in data)
-            spark_df = spark.createDataFrame(data) # Simpler approach
+            # --- DataFrame Creation ---
+            self.logger.debug("Converting list of dictionaries to Pandas DataFrame...")
+            new_df = pd.DataFrame(data)
+            self.logger.debug(f"DataFrame created with shape: {new_df.shape}")
 
-            # Optional: Cache if the DataFrame is reused, but not needed here
-            # spark_df.cache()
-            logger.debug(f"Spark DataFrame created in {time.time() - start_time:.2f} seconds. Schema:")
-            spark_df.printSchema() # Log the inferred schema for debugging
-
-            if spark_df.isEmpty():
-                 logger.warning("Created Spark DataFrame is empty. Skipping Parquet save.")
+            if new_df.empty:
+                 self.logger.warning("DataFrame created from data is empty. Skipping Parquet save.")
                  return
 
-            # Write using Spark DataFrameWriter
-            logger.info(f"Writing Spark DataFrame ({spark_df.count()} rows) to {self.output_parquet_path}...")
-            write_start_time = time.time()
-            spark_df.write.mode(mode).parquet(self.output_parquet_path)
-            logger.info(f"Successfully saved data using Spark in {time.time() - write_start_time:.2f} seconds.")
+            final_df = new_df
+            # --- Handle Append Mode ---
+            if mode == 'append':
+                if os.path.exists(self.output_parquet_path):
+                    self.logger.info(f"Append mode: Reading existing data from {self.output_parquet_path}")
+                    try:
+                        existing_df = pd.read_parquet(self.output_parquet_path, engine='pyarrow')
+                        self.logger.info(f"Read {len(existing_df)} existing records. Columns: {existing_df.columns.tolist()}")
+                        self.logger.info(f"New data has {len(new_df)} records. Columns: {new_df.columns.tolist()}")
 
-            # Optional: Unpersist if cached
-            # spark_df.unpersist()
+                        # Optional: Check for schema compatibility before concatenating
+                        if not existing_df.columns.equals(new_df.columns):
+                             self.logger.warning(f"Schema mismatch between existing file and new data. Appending may lead to unexpected results or errors.")
+                             # Depending on requirements, you might want to:
+                             # 1. Raise an error: raise LloguerError("Schema mismatch during append.")
+                             # 2. Try to align columns (more complex)
+                             # 3. Proceed with caution (current behavior of concat)
 
-        except AnalysisException as e:
-            # Errors during DataFrame analysis (e.g., path not found for append source)
-            msg = f"Spark Analysis Exception during save to {self.output_parquet_path}: {e}"
-            logger.error(msg)
+                        # Concatenate old and new data
+                        final_df = pd.concat([existing_df, new_df], ignore_index=True)
+                        self.logger.info(f"Concatenated data. New total records: {len(final_df)}")
+                    except FileNotFoundError:
+                         # Should not happen due to os.path.exists, but handle defensively
+                         self.logger.warning(f"Append mode: File {self.output_parquet_path} disappeared between check and read. Creating new file.")
+                    except (pd.errors.EmptyDataError, pyarrow.lib.ArrowInvalid) as read_err:
+                        # Catch specific errors related to empty or corrupted files during read
+                        msg = f"Error reading existing (potentially empty or corrupted) Parquet file {self.output_parquet_path} for append: {read_err}"
+                        self.logger.error(msg)
+                        raise LloguerError(msg, underlying_exception=read_err) from read_err
+                    except Exception as read_err: # Catch other broad exceptions during read
+                        msg = f"Unexpected error reading existing Parquet file {self.output_parquet_path} for append: {read_err}"
+                        self.logger.exception(msg) # Log with traceback
+                        raise LloguerError(msg, underlying_exception=read_err) from read_err
+                else:
+                    self.logger.info(f"Append mode: File {self.output_parquet_path} not found. Will create a new file.")
+
+            # --- Ensure Directory Exists ---
+            output_dir = os.path.dirname(self.output_parquet_path)
+            if output_dir and not os.path.exists(output_dir):
+                 self.logger.info(f"Creating output directory: {output_dir}")
+                 os.makedirs(output_dir, exist_ok=True) # exist_ok=True prevents error if dir exists
+
+            # --- Write Parquet File ---
+            self.logger.info(f"Writing {len(final_df)} records to {self.output_parquet_path} (Engine: pyarrow)...")
+            start_time = time.time()
+            # Use pyarrow engine, specify index=False unless the index is meaningful
+            final_df.to_parquet(self.output_parquet_path, engine='pyarrow', index=False)
+            end_time = time.time()
+            self.logger.info(f"Successfully saved data to {self.output_parquet_path} in {end_time - start_time:.2f} seconds.")
+
+        except (ValueError, TypeError) as val_err: # Catch Pandas/PyArrow type/value errors
+             msg = f"Data type or value error during DataFrame processing or Parquet saving: {val_err}"
+             self.logger.error(msg)
+             raise LloguerError(msg, underlying_exception=val_err) from val_err
+        except IOError as io_err: # Catch file system errors during write
+            msg = f"IOError saving Parquet file to {self.output_parquet_path}: {io_err}"
+            self.logger.error(msg)
+            raise LloguerError(msg, underlying_exception=io_err) from io_err
+        except pyarrow.lib.ArrowException as arrow_err: # Catch specific PyArrow errors
+            msg = f"PyArrow error during Parquet save to {self.output_parquet_path}: {arrow_err}"
+            self.logger.error(msg)
+            raise LloguerError(msg, underlying_exception=arrow_err) from arrow_err
+        except Exception as e: # Catch other potential errors
+            msg = f"An unexpected error occurred during Parquet save operation: {e}"
+            self.logger.exception(msg) # Use exception to log traceback
             raise LloguerError(msg, underlying_exception=e) from e
-        except PySparkException as e:
-             # Catch other general PySpark errors during DataFrame creation or writing
-             msg = f"PySpark error during save operation to {self.output_parquet_path}: {e}"
-             logger.error(msg)
-             raise LloguerError(msg, underlying_exception=e) from e
-        except Exception as e: # Catch any other unexpected errors
-            msg = f"An unexpected error occurred during Spark save to {self.output_parquet_path}: {e}"
-            logger.exception(msg) # Use exception to log traceback
-            raise LloguerError(msg, underlying_exception=e) from e
 
-    def run(self, spark: SparkSession, save_mode: str = 'overwrite') -> None: # type: ignore
+    def run(self, save_mode: str = 'overwrite') -> Optional[int]:
         """
-        Executes the full data collection and saving pipeline using Spark.
+        Executes the full data collection and saving pipeline using Pandas.
 
         Args:
-            spark (SparkSession): The active SparkSession.
-            save_mode (str): The Spark mode for saving the data ('overwrite', 'append', etc.).
-        """
-        if SparkSession is None:
-             logger.error("Cannot run: PySpark is not available.")
-             return
-        if not spark or not isinstance(spark, SparkSession):
-             logger.error("Cannot run: A valid SparkSession must be provided.")
-             return
+            save_mode (str): The mode for saving the data ('overwrite' or 'append').
 
-        logger.info(f"Starting Lloguer data collection run (Save Mode: {save_mode})...")
+        Returns:
+            Optional[int]: The number of records fetched, or None if fetching failed or no data was fetched.
+        """
+        self.logger.info(f"Starting Lloguer data collection run (Save Mode: {save_mode})...")
+        self.last_fetch_count = 0 # Reset count for the run
         try:
             fetched_data = self.fetch_all_data()
             if fetched_data: # Only save if data was actually fetched
-                 self.save_to_spark_parquet(spark, fetched_data, mode=save_mode)
-            else:
-                 logger.info("No data fetched from API, skipping Spark save.")
-            logger.info("Lloguer data collection run finished successfully.")
+                 self.save_to_parquet(fetched_data, mode=save_mode)
+            elif fetched_data is None: # Fetch failed or returned None explicitly
+                 self.logger.warning("Fetching process did not return data. Skipping save.")
+                 return None # Indicate fetch issue
+            else: # fetched_data is an empty list
+                 self.logger.info("No data fetched from API (API returned empty list). Skipping save.")
+            self.logger.info("Lloguer data collection run finished successfully.")
+            return self.last_fetch_count # Return the number of records fetched in this run
         except LloguerError as e:
-            # Log the specific error from our application logic
-            logger.error(f"Lloguer data collection run failed: {e}")
-            # Depending on the orchestration, you might want to raise it further
-            # raise e
+            self.logger.error(f"Lloguer data collection run failed: {e}")
+            return None # Indicate failure
         except Exception as e:
-            # Catch unexpected errors during the run
-            logger.exception(f"An unexpected critical error occurred during the run: {e}")
-            # Depending on the severity, might raise LloguerError or let it propagate
-            # raise LloguerError("Critical unexpected error during run", underlying_exception=e) from e
+            # Catch any unexpected error during the run sequence
+            self.logger.exception(f"An unexpected critical error occurred during the run: {e}")
+            return None # Indicate failure
 
 
-# --- Example Usage ---
+# --- Parquet Reader Class ---
+class ParquetReader:
+    """
+    A simple class to read a Parquet file using Pandas and PyArrow.
+    """
+    def __init__(self, parquet_path: str, logger: Optional[logging.Logger] = None):
+        """
+        Initializes the ParquetReader.
+
+        Args:
+            parquet_path (str): The path to the Parquet file to be read.
+            logger (Optional[logging.Logger]): Logger instance.
+        """
+        if not parquet_path:
+            raise ValueError("Parquet path cannot be empty.")
+        self.parquet_path = parquet_path
+        self.logger = logger or logging.getLogger(__name__)
+        self.logger.info(f"ParquetReader initialized for path: {self.parquet_path}")
+
+    def read_data(self) -> pd.DataFrame:
+        """
+        Reads the Parquet file specified during initialization using Pandas and PyArrow.
+
+        Returns:
+            pd.DataFrame: A pandas DataFrame containing the data from the Parquet file.
+
+        Raises:
+            FileNotFoundError: If the parquet file does not exist at the path.
+            ReaderError: If the file cannot be read due to corruption, permission issues,
+                         or other PyArrow/Pandas errors during reading.
+        """
+        self.logger.info(f"Attempting to read Parquet file: {self.parquet_path}")
+        if not os.path.exists(self.parquet_path):
+            msg = f"Parquet file not found at path: {self.parquet_path}"
+            self.logger.error(msg)
+            # Raise built-in FileNotFoundError, as it's the standard exception for this
+            raise FileNotFoundError(msg)
+
+        try:
+            start_time = time.time()
+            # Explicitly use pyarrow engine for consistency with saving
+            df = pd.read_parquet(self.parquet_path, engine='pyarrow')
+            end_time = time.time()
+            self.logger.info(f"Successfully read {len(df)} records from {self.parquet_path} in {end_time - start_time:.2f} seconds.")
+            # Basic validation: Check if DataFrame is empty after reading a non-empty file
+            # Note: A valid parquet file *can* be empty, so this is just a sanity check.
+            if df.empty and os.path.getsize(self.parquet_path) > 0:
+                 self.logger.warning(f"Read an empty DataFrame from a non-empty Parquet file: {self.parquet_path}. File size: {os.path.getsize(self.parquet_path)} bytes.")
+                 # Depending on strictness, could raise ReaderError here
+                 # raise ReaderError(f"Read empty DataFrame from non-empty file: {self.parquet_path}")
+
+            return df
+        except (pd.errors.EmptyDataError, pyarrow.lib.ArrowInvalid, pyarrow.lib.ArrowIOError) as e:
+            # Catch specific errors indicating corrupted file, IO problems during read, etc.
+            msg = f"Failed to read Parquet file {self.parquet_path} (potential corruption or I/O issue): {e}"
+            self.logger.error(msg)
+            raise ReaderError(msg, underlying_exception=e) from e
+        except MemoryError as e:
+             msg = f"MemoryError while reading Parquet file {self.parquet_path}. File might be too large for available memory."
+             self.logger.error(msg)
+             raise ReaderError(msg, underlying_exception=e) from e
+        except Exception as e:
+            # Catch any other unexpected exceptions during the read process
+            msg = f"An unexpected error occurred while reading Parquet file {self.parquet_path}: {e}"
+            self.logger.exception(msg) # Log traceback for unexpected errors
+            raise ReaderError(msg, underlying_exception=e) from e
+
+
+# --- Example Usage with Enhanced Verification ---
 if __name__ == "__main__":
 
-    if SparkSession is None:
-        print("Cannot execute main block because PySpark is not available.")
-    else:
-        spark = None # Initialize spark variable
+    # --- Define Configuration ---
+    API_URL = "https://analisi.transparenciacatalunya.cat/resource/qww9-bvhh.json"
+    # Use a temporary directory for outputs for cleaner testing
+    TEST_OUTPUT_DIR = "temp_parquet_test_output"
+    OUTPUT_PARQUET = os.path.join(TEST_OUTPUT_DIR, "lloguer_data_test.parquet")
+    REQUEST_LIMIT = 500 # Smaller limit for faster testing
+    REQUEST_DELAY = 0.1 # Shorter delay for testing
+    TIMEOUT = 30      # Slightly longer timeout for potentially slow API
+
+    # Ensure clean state for testing
+    if os.path.exists(OUTPUT_PARQUET):
+        logger.info(f"Removing existing test file: {OUTPUT_PARQUET}")
         try:
-            # --- Initialize Spark Session ---
-            # Adjust master URL and configurations as needed for your environment
-            # local[*] uses all available cores locally
-            spark = SparkSession.builder.appName("LloguerDataCollector").master("local[*]").config("spark.sql.parquet.compression.codec", "snappy").getOrCreate()
-
-            logger.info(f"Spark Session created. Version: {spark.version}")
-            sc = spark.sparkContext
-            logger.info(f"Spark Context Web UI: {sc.uiWebUrl}")
-
-            # --- Define Output Path ---
-            # Use a local path for this example. Change for HDFS/S3 etc.
-            # Spark will create a directory here, not a single file.
-            output_dir = "lloguer_data_spark.parquet"
+            os.remove(OUTPUT_PARQUET)
+        except OSError as e:
+             logger.warning(f"Could not remove existing file {OUTPUT_PARQUET}: {e}")
+    if os.path.exists(TEST_OUTPUT_DIR) and not os.listdir(TEST_OUTPUT_DIR):
+        try:
+            os.rmdir(TEST_OUTPUT_DIR) # Remove dir only if empty
+        except OSError as e:
+             logger.warning(f"Could not remove empty test directory {TEST_OUTPUT_DIR}: {e}")
+    elif not os.path.exists(TEST_OUTPUT_DIR):
+        os.makedirs(TEST_OUTPUT_DIR) # Create dir if it doesn't exist
 
 
-            # --- Scenario 1: First time run or overwrite ---
-            logger.info(f"\n--- Running Scenario 1: Overwrite mode to {output_dir} ---")
-            collector_overwrite = Lloguer(
-                output_parquet_path=output_dir,
-                request_limit=500 # Smaller limit for faster testing
-            )
-            collector_overwrite.run(spark, save_mode='overwrite')
+    count1 = 0 # Initialize count after first run
+    fetched_count1 = 0 # Count fetched in first run
 
-            # Verification using Spark
+    try:
+        # --- Scenario 1: First time run (overwrite) ---
+        logger.info(f"\n--- Running Scenario 1: Overwrite mode to {OUTPUT_PARQUET} ---")
+        collector_overwrite = Lloguer(
+            api_url=API_URL,
+            output_parquet_path=OUTPUT_PARQUET,
+            request_limit=REQUEST_LIMIT,
+            request_delay=REQUEST_DELAY,
+            timeout=TIMEOUT,
+            logger=logger # Pass the main logger
+        )
+        run1_result = collector_overwrite.run(save_mode='overwrite')
+
+        if run1_result is None:
+            logger.error("Scenario 1 failed during Lloguer run. Aborting further tests.")
+        else:
+            fetched_count1 = run1_result
+            logger.info(f"Scenario 1 fetched {fetched_count1} records.")
+
+            # --- Verification S1 using ParquetReader ---
+            logger.info("--- Verifying Scenario 1 Output (Overwrite) ---")
+            if os.path.exists(OUTPUT_PARQUET):
+                try:
+                    reader_s1 = ParquetReader(parquet_path=OUTPUT_PARQUET, logger=logger)
+                    df_check1 = reader_s1.read_data()
+                    count1 = len(df_check1)
+                    logger.info(f"Verification S1: ParquetReader successful. Read {count1} records.")
+
+                    # Check if read count matches fetched count
+                    if count1 == fetched_count1:
+                        logger.info(f"Verification S1: OK - Record count in file ({count1}) matches fetched count ({fetched_count1}).")
+                    else:
+                        logger.warning(f"Verification S1: MISMATCH - Record count in file ({count1}) does NOT match fetched count ({fetched_count1}).")
+
+                    # Basic integrity check
+                    if not df_check1.empty:
+                         logger.info("Verification S1: OK - DataFrame read is not empty.")
+                    elif count1 == 0:
+                         logger.info("Verification S1: OK - DataFrame is empty, matching zero records read/fetched.")
+                    else: # Should not happen if count1 > 0
+                         logger.error("Verification S1: FAILED - Read count > 0 but DataFrame is empty (unexpected).")
+
+                    # --- Inspect Data (Scenario 1) ---
+                    if count1 > 0: # Only inspect if data was actually read
+                        logger.info("--- Inspecting Data from Scenario 1 ---")
+
+                        # 1. Show Schema/Info
+                        logger.info("\nDataFrame Info (Schema - Scenario 1):")
+                        # Use a buffer to capture info() output for logging if needed, or just print
+                        print("-------------------- Schema S1 --------------------")
+                        df_check1.info()
+                        print("---------------------------------------------------")
+
+
+                        # 2. Show Sample Data
+                        logger.info("\nSample Data (First 5 rows - Scenario 1):")
+                        print("-------------------- Sample S1 --------------------")
+                        # Use to_string() to avoid truncation in console width
+                        print(df_check1.head().to_string())
+                        print("---------------------------------------------------")
+
+                        # 3. Count Distinct 'nom_territori'
+                        territori_col = 'nom_territori' # Define column name once
+                        if territori_col in df_check1.columns:
+                            distinct_territori_count = df_check1[territori_col].nunique()
+                            logger.info(f"\nDistinct '{territori_col}' count (Scenario 1): {distinct_territori_count}")
+                            # Optional: print the unique values if not too many
+                            # if distinct_territori_count < 20:
+                            #    logger.info(f"Unique '{territori_col}' values: {df_check1[territori_col].unique().tolist()}")
+                        else:
+                            logger.warning(f"\nColumn '{territori_col}' not found in DataFrame for Scenario 1.")
+                        logger.info("--- End Inspection (Scenario 1) ---")
+
+                except (FileNotFoundError, ReaderError) as read_err:
+                    logger.error(f"Verification S1 FAILED: Error reading Parquet file with ParquetReader: {read_err}")
+                except Exception as e:
+                     logger.error(f"Verification S1 FAILED: Unexpected error during verification: {e}", exc_info=True)
+            else:
+                 logger.error(f"Verification S1 FAILED: Parquet file {OUTPUT_PARQUET} not found after run.")
+
+
+            # --- Scenario 2: Subsequent run (append) ---
+            # Only run if Scenario 1 seemed successful (file exists, count >= 0)
+            if os.path.exists(OUTPUT_PARQUET): # Check file exists from S1
+                logger.info(f"\n--- Running Scenario 2: Append mode to {OUTPUT_PARQUET} ---")
+                # Re-use the collector or create a new one
+                collector_append = collector_overwrite
+                run2_result = collector_append.run(save_mode='append')
+
+                if run2_result is None:
+                     logger.error("Scenario 2 failed during Lloguer run.")
+                else:
+                    fetched_count2 = run2_result
+                    logger.info(f"Scenario 2 fetched {fetched_count2} records (to append).")
+
+                    # --- Verification S2 using ParquetReader ---
+                    logger.info("--- Verifying Scenario 2 Output (Append) ---")
+                    if os.path.exists(OUTPUT_PARQUET):
+                        try:
+                            reader_s2 = ParquetReader(parquet_path=OUTPUT_PARQUET, logger=logger)
+                            df_check2 = reader_s2.read_data()
+                            count2 = len(df_check2)
+                            logger.info(f"Verification S2: ParquetReader successful. Read {count2} records.")
+
+                            # Check if count increased as expected
+                            expected_count2 = count1 + fetched_count2
+                            if count2 == expected_count2:
+                                logger.info(f"Verification S2: OK - Record count ({count2}) matches expected count after append ({count1} + {fetched_count2} = {expected_count2}).")
+                            else:
+                                logger.warning(f"Verification S2: MISMATCH - Record count ({count2}) does NOT match expected count ({expected_count2}).")
+                                logger.warning(f"  (Count before append was {count1}, records fetched in S2 were {fetched_count2})")
+
+                            # Basic integrity check
+                            if not df_check2.empty:
+                                logger.info("Verification S2: OK - DataFrame read is not empty.")
+                            elif count2 == 0:
+                                 logger.info("Verification S2: OK - DataFrame is empty, matching zero total records.")
+                            else:
+                                 logger.error("Verification S2: FAILED - Read count > 0 but DataFrame is empty (unexpected).")
+
+
+                            # --- Inspect Data (Scenario 2) ---
+                            if count2 > 0: # Only inspect if data was actually read
+                                logger.info("--- Inspecting Data from Scenario 2 (After Append) ---")
+
+                                # 1. Show Schema/Info
+                                logger.info("\nDataFrame Info (Schema - Scenario 2):")
+                                print("-------------------- Schema S2 --------------------")
+                                df_check2.info()
+                                print("---------------------------------------------------")
+
+                                # 2. Show Sample Data
+                                logger.info("\nSample Data (First 5 rows - Scenario 2):")
+                                print("-------------------- Sample S2 --------------------")
+                                print(df_check2.head().to_string())
+                                print("---------------------------------------------------")
+
+
+                                # 3. Count Distinct 'nom_territori'
+                                territori_col = 'nom_territori' # Use same variable name
+                                if territori_col in df_check2.columns:
+                                    distinct_territori_count_s2 = df_check2[territori_col].nunique()
+                                    logger.info(f"\nDistinct '{territori_col}' count (Scenario 2): {distinct_territori_count_s2}")
+                                    # Compare with S1 count if available
+                                    try:
+                                         if distinct_territori_count: # Check if S1 count exists
+                                             if distinct_territori_count_s2 == distinct_territori_count:
+                                                 logger.info(f"-> Distinct '{territori_col}' count is unchanged from Scenario 1.")
+                                             else:
+                                                 logger.warning(f"-> Distinct '{territori_col}' count changed from {distinct_territori_count} (S1) to {distinct_territori_count_s2} (S2).")
+                                    except NameError: # Handle case where distinct_territori_count wasn't set in S1
+                                         pass
+                                else:
+                                    logger.warning(f"\nColumn '{territori_col}' not found in DataFrame for Scenario 2.")
+                                logger.info("--- End Inspection (Scenario 2) ---")
+
+
+                        except (FileNotFoundError, ReaderError) as read_err:
+                             logger.error(f"Verification S2 FAILED: Error reading Parquet file with ParquetReader after append: {read_err}")
+                        except Exception as e:
+                             logger.error(f"Verification S2 FAILED: Unexpected error during verification: {e}", exc_info=True)
+                    else:
+                        logger.error(f"Verification S2 FAILED: Parquet file {OUTPUT_PARQUET} not found after append run.")
+            else:
+                logger.warning("Skipping Scenario 2 because Scenario 1 verification indicated issues or file absence.")
+
+
+    except LloguerError as app_err:
+        logger.error(f"Application error during execution: {app_err}", exc_info=True) # Include traceback for app errors
+    except ValueError as val_err:
+         logger.error(f"Configuration or Value error: {val_err}", exc_info=True)
+    except Exception as e:
+        logger.exception(f"An critical unexpected error occurred in the main block: {e}") # Use exception for full traceback
+
+    finally:
+        # Optional: Clean up the created parquet file and directory after testing
+        # Comment out if you want to inspect the file manually
+        logger.info("--- Test Cleanup ---")
+        if os.path.exists(OUTPUT_PARQUET):
             try:
-                logger.info("Verifying Scenario 1 output...")
-                df_check1 = spark.read.parquet(output_dir)
-                count1 = df_check1.count()
-                logger.info(f"Verification S1: Spark read successful. Found {count1} records.")
-                # df_check1.show(5, truncate=False) # Show some data
-            except Exception as read_err:
-                 logger.error(f"Verification S1 failed: Error reading Parquet with Spark: {read_err}")
-
-
-            # --- Scenario 2: Subsequent run with append ---
-            # IMPORTANT: Spark's 'append' adds data. If the API always returns the *full*
-            # dataset, running append will duplicate data. Use 'append' only if the API
-            # provides *new* delta records or if duplication is acceptable/handled later.
-            # For this example, we demonstrate append assuming new data might exist.
-            logger.info(f"\n--- Running Scenario 2: Append mode to {output_dir} ---")
-            collector_append = Lloguer(
-                output_parquet_path=output_dir,
-                request_limit=500
-            )
-            collector_append.run(spark, save_mode='append')
-
-            # Verification using Spark
-            try:
-                logger.info("Verifying Scenario 2 output...")
-                df_check2 = spark.read.parquet(output_dir)
-                count2 = df_check2.count()
-                logger.info(f"Verification S2: Spark read successful. Found {count2} records.")
-                # Expect count2 to be roughly 2 * count1 if API data is static
-                # Or count1 + new_records if API provides deltas.
-                if count1 > 0 : # Avoid division by zero if first run failed
-                     logger.info(f"Record count changed from {count1} to {count2} (Ratio: {count2/count1:.2f})")
-
-            except Exception as read_err:
-                 logger.error(f"Verification S2 failed: Error reading Parquet with Spark: {read_err}")
-
-        except LloguerError as app_err:
-            logger.error(f"Application error during execution: {app_err}")
-        except Exception as e:
-            logger.exception(f"An unexpected error occurred in the main block: {e}")
-        finally:
-            # --- Stop Spark Session ---
-            if spark:
-                logger.info("Stopping Spark Session.")
-                spark.stop()
-                logger.info("Spark Session stopped.")
+                logger.info(f"Removing test file: {OUTPUT_PARQUET}")
+                os.remove(OUTPUT_PARQUET)
+            except OSError as e:
+                logger.warning(f"Could not remove test file {OUTPUT_PARQUET}: {e}")
+        if os.path.exists(TEST_OUTPUT_DIR):
+             try:
+                 # Only remove if empty after file removal
+                 if not os.listdir(TEST_OUTPUT_DIR):
+                     logger.info(f"Removing empty test directory: {TEST_OUTPUT_DIR}")
+                     os.rmdir(TEST_OUTPUT_DIR)
+                 else:
+                      logger.warning(f"Test directory {TEST_OUTPUT_DIR} not empty, not removing.")
+             except OSError as e:
+                logger.warning(f"Could not remove test directory {TEST_OUTPUT_DIR}: {e}")
+        logger.info("--- End of Script ---")

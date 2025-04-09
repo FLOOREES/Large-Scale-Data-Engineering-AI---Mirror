@@ -1,1 +1,1 @@
-from .lloguer import Lloguer, LloguerError
+from .lloguer import Lloguer, LloguerError, ParquetReader, ReaderError 
