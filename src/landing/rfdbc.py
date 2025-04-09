@@ -147,15 +147,12 @@ class RFDBC:
                 print("Stopping Spark Session.")
                 spark.stop()
 
-
-if __name__ == "__main__":
-    rfdbc = RFDBC()
-    print(f"Fetching data from {rfdbc.url}...")
-    raw_api_data = rfdbc.get_data()
-
-    if raw_api_data:
-        print("Data fetched successfully.")
-        output_path = "./data/landing/rfdbc.parquet"
-        rfdbc.to_parquet(raw_api_data, output_path)
-    else:
-        print("No data fetched from API.")
+    def run(self, output_path = "./data/landing/rfdbc.parquet"):
+        """
+        Main method to fetch, transform, and save data.
+        """
+        raw_api_data = self.get_data()
+        if raw_api_data:
+            self.to_parquet(raw_api_data, output_path)
+        else:
+            print("Failed to fetch data from API.")
