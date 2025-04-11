@@ -181,7 +181,7 @@ class Idescat:
 
         # Optional CSV Saving
         if save_csv:
-            csv_output_path = "/data/landing/idescat.csv"
+            csv_output_path = "./data/landing/idescat.csv"
             try:
                 df_landing.to_csv(csv_output_path, index=False, encoding='utf-8-sig')
                 print(f"Successfully saved landing data to CSV: {csv_output_path}")
@@ -189,7 +189,7 @@ class Idescat:
                 print(f"Error saving DataFrame to CSV file {csv_output_path}: {e}")
 
         # Save to Parquet (Primary Format)
-        parquet_output_path = "/data/landing/idescat.parquet"
+        parquet_output_path = "./data/landing/idescat.parquet"
         try:
             df_landing.to_parquet(parquet_output_path, index=False, engine='pyarrow')
             print(f"Successfully saved landing data to PARQUET: {parquet_output_path}")

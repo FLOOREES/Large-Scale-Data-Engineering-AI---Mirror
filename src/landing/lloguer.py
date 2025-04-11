@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Lloguer:
     def __init__(self):
         self.api_url = "https://analisi.transparenciacatalunya.cat/resource/qww9-bvhh.json"
-        self.output_parquet_path = "./data/landing/lloguer_catalunya.parquet"
+        self.output_parquet_path = "./data/landing/lloguer.parquet"
         self.request_limit = 1000
         self.request_delay = 0.5
         self.timeout = 60
