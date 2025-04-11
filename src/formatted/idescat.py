@@ -12,11 +12,10 @@ from pyspark.sql.types import (
 # ---------------------
 
 # --- Delta Lake Package Configuration ---
-# Ensure this matches a version compatible with your Spark 3.3.0
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Example: Use 2.4.0 for Spark 3.3
+DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0"
 
 
-class IdescatFormattedZoneSimple:
+class IdescatFormattedZone:
     """
     Reads Idescat landing zone Parquet, applies schema and types (handling timestamp issue),
     and writes to a Delta Lake table in the Formatted Zone. (Simplified & Fixed v2)
@@ -159,7 +158,7 @@ if __name__ == "__main__":
     spark = None
     try:
         spark = get_spark_session()
-        formatter = IdescatFormattedZoneSimple(spark=spark, input_path=INPUT_PARQUET, output_path=OUTPUT_DELTA)
+        formatter = IdescatFormattedZone(spark=spark, input_path=INPUT_PARQUET, output_path=OUTPUT_DELTA)
         formatter.run()
     except Exception as main_error:
         print(f"An error occurred outside the run method: {main_error}")
