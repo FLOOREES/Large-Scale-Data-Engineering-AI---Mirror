@@ -150,8 +150,8 @@ def get_spark_session() -> SparkSession:
 # --- Main Execution Block ---
 if __name__ == "__main__":
     # Define paths for direct execution
-    INPUT_DELTA_FORMATTED = "./data/formatted/idescat_indicators" # Read from Formatted
-    OUTPUT_DELTA_TRUSTED = "./data/trusted/idescat_indicators"   # Write to Trusted
+    INPUT_DELTA_FORMATTED = "./data/formatted/idescat" # Read from Formatted
+    OUTPUT_DELTA_TRUSTED = "./data/trusted/idescat"   # Write to Trusted
 
     spark = None
     try:
