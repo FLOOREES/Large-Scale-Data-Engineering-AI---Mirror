@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from typing import List, Dict, Optional, Any
 
-class Idescat:
+class IdescatLandingZone:
     """
     Handles fetching selected Idescat EMEX indicators for all municipalities
     and saving the results to the landing zone in Parquet format.

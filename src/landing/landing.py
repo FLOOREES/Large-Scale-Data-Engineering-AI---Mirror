@@ -1,10 +1,10 @@
-from src.landing.idescat import Idescat
-from src.landing.lloguer import Lloguer
-from src.landing.rfdbc import RFDBC
+from src.landing.idescat import IdescatLandingZone
+from src.landing.lloguer import LloguerLandingZone
+from src.landing.rfdbc import RFDBCLandingZone
 
-idescat = Idescat()
-lloguer = Lloguer()
-rfdbc = RFDBC()
+idescat = IdescatLandingZone()
+lloguer = LloguerLandingZone()
+rfdbc = RFDBCLandingZone()
 
 try: 
 	idescat.run()

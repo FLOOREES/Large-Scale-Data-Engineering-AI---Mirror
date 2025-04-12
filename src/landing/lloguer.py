@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Data Collector Class ---
-class Lloguer:
+class LloguerLandingZone:
     """
     Collects paginated rent data from an API and saves it to a Parquet file,
     overwriting any existing file. Uses Pandas and PyArrow.
@@ -202,12 +202,3 @@ class Lloguer:
             # Specific errors logged in fetch/save methods. This catches the failure.
             logger.error(f"--- Lloguer Run Failed. See previous logs for error details. ---", exc_info=False)
             raise # Re-raise the exception to signal failure to the caller
-
-if __name__ == "__main__":
-    lloguer = Lloguer()
-    try:
-        lloguer.run(verbose=True) # Set verbose to True for inspection
-    except Exception as e:
-        logger.error(f"Error in Lloguer run: {e}", exc_info=True)
-    finally:
-        logger.info("Lloguer process completed.")

@@ -1,9 +1,5 @@
-# --- Imports ---
-from pathlib import Path
-from typing import Optional
-
 # --- PySpark Imports ---
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     StructType, StructField, StringType, IntegerType, DoubleType, TimestampType, LongType
@@ -14,13 +10,13 @@ from pyspark.sql.types import (
 DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0"
 
 
-class IdescatFormattedZoneSimple:
+class IdescatFormattedZone:
     """
     Reads Idescat landing zone Parquet, normalizes municipality IDs,
     applies schema and types, and writes to a Delta Lake table in the Formatted Zone.
     """
 
-    def __init__(self, spark: SparkSession, input_path: str or Path, output_path: str or Path):
+    def __init__(self, spark: SparkSession, input_path: str, output_path: str):
         self.spark = spark
         self.input_path = str(input_path)
         self.output_path = str(output_path)
@@ -180,7 +176,7 @@ if __name__ == "__main__":
     spark = None
     try:
         spark = get_spark_session()
-        formatter = IdescatFormattedZoneSimple(spark=spark, input_path=INPUT_PARQUET, output_path=OUTPUT_DELTA)
+        formatter = IdescatFormattedZone(spark=spark, input_path=INPUT_PARQUET, output_path=OUTPUT_DELTA)
         formatter.run()
     except Exception as main_error:
         print(f"An error occurred outside the run method: {main_error}")

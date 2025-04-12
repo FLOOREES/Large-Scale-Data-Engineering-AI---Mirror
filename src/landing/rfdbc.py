@@ -1,10 +1,7 @@
 import requests
 import json
-import itertools
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
 
-class RFDBC:
+class RFDBCLandingZone:
     def __init__(self) -> None:
         # URL for specific table: RFDB i RFDB per habitant. Municipis. 2010-2021.
         self.api_url = "https://api.idescat.cat/taules/v2/rfdbc/13301/14148/mun/data"
@@ -30,7 +27,7 @@ class RFDBC:
         raw_api_data = self.fetch_data()
         
         # Save data in json format (as it cannot be transformed to parquet because of the complex nested structure)
-        with open("./data/landing/rfdbc.json", "w") as f:
+        with open(output_path, "w") as f:
             json.dump(raw_api_data, f, indent=4)
 
             
