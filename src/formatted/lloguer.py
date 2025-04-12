@@ -178,7 +178,7 @@ def get_spark_session() -> SparkSession:
 # --- Main Execution Block ---
 if __name__ == "__main__":
     INPUT_PARQUET = "./data/landing/lloguer.parquet"   # Input from Lloguer landing script
-    OUTPUT_DELTA = "./data/formatted/lloguer_catalunya" # Output Delta table path
+    OUTPUT_DELTA = "./data/formatted/lloguer" # Output Delta table path
 
     Path(OUTPUT_DELTA).parent.mkdir(parents=True, exist_ok=True) # Ensure formatted dir exists
 

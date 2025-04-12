@@ -25,9 +25,7 @@ class Lloguer:
         # --- Configuration moved inside __init__ for encapsulation ---
         self.api_url = "https://analisi.transparenciacatalunya.cat/resource/qww9-bvhh.json"
         # Define base output dir and filename separately
-        self.output_dir = "./data/landing/"
-        self.output_filename = "lloguer_catalunya.parquet"
-        self.output_parquet_path = os.path.join(self.output_dir, self.output_filename)
+        self.output_parquet_path = "./data/landing/lloguer.parquet"
         self.request_limit = 1000
         self.request_delay = 0.5
         self.timeout = 60
@@ -125,11 +123,6 @@ class Lloguer:
             if df.empty:
                 logger.warning("Created DataFrame is empty. Skipping Parquet save.")
                 return 0
-
-            # Ensure output directory exists before writing
-            output_dir_path = os.path.dirname(self.output_parquet_path)
-            if output_dir_path: # Check if path has a directory part
-                 os.makedirs(output_dir_path, exist_ok=True)
 
             logger.info(f"Writing {len(df)} records using engine 'pyarrow'...")
             start_time = time.time()

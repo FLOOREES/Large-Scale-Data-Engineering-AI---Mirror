@@ -20,7 +20,7 @@ class RFDBCFormattedZone:
     in the Formatted Zone using PySpark.
     """
 
-    def __init__(self, spark: SparkSession, output_path: str = "./data/formatted/rfdbc_data", input_data_path: str = "./data/landing/rfdbc.json"):
+    def __init__(self, spark: SparkSession, output_path: str = "./data/formatted/rfdbc", input_data_path: str = "./data/landing/rfdbc.json"):
         self.spark = spark
         self.input_data_path = input_data_path
         self.input_data = self._load_input_data()
@@ -321,7 +321,7 @@ def get_spark_session() -> SparkSession:
 if __name__ == "__main__":
     # ----------------------------------------------------
 
-    OUTPUT_DELTA_PATH = "./data/formatted/rfdbc_data" 
+    OUTPUT_DELTA_PATH = "./data/formatted/rfdbc" 
 
     spark = None
     try:

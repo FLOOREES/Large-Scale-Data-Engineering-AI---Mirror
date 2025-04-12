@@ -153,7 +153,7 @@ def get_spark_session() -> SparkSession:
 # --- Main Execution Block ---
 if __name__ == "__main__":
     INPUT_PARQUET = "./data/landing/idescat.parquet" # Make sure this file exists
-    OUTPUT_DELTA = "./data/formatted/idescat_indicators"
+    OUTPUT_DELTA = "./data/formatted/idescat"
 
     spark = None
     try:

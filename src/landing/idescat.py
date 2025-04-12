@@ -179,15 +179,6 @@ class Idescat:
         existing_columns = [col for col in desired_order if col in df_landing.columns]
         df_landing = df_landing[existing_columns]
 
-        # Optional CSV Saving
-        if save_csv:
-            csv_output_path = "./data/landing/idescat.csv"
-            try:
-                df_landing.to_csv(csv_output_path, index=False, encoding='utf-8-sig')
-                print(f"Successfully saved landing data to CSV: {csv_output_path}")
-            except Exception as e:
-                print(f"Error saving DataFrame to CSV file {csv_output_path}: {e}")
-
         # Save to Parquet (Primary Format)
         parquet_output_path = "./data/landing/idescat.parquet"
         try:
