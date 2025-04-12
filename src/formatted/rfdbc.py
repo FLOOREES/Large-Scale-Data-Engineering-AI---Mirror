@@ -321,7 +321,7 @@ def get_spark_session() -> SparkSession:
 if __name__ == "__main__":
     # ----------------------------------------------------
 
-    OUTPUT_DELTA_PATH = "./data/formatted/rfdc_data" 
+    OUTPUT_DELTA_PATH = "./data/formatted/rfdbc_data" 
 
     spark = None
     try:
