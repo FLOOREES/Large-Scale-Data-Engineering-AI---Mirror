@@ -1,14 +1,7 @@
-# trusted_zone_idescat.py
-
-from pathlib import Path
-from typing import Optional
-
 # --- PySpark Imports ---
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import (
-    StructType, StructField, StringType, IntegerType, DoubleType, TimestampType, LongType
-)
+
 # ---------------------
 
 # --- Delta Lake Package Configuration ---
@@ -20,7 +13,7 @@ class IdescatTrustedZone:
     applying quality rules and deduplication before saving to the Trusted Zone.
     """
 
-    def __init__(self, spark: SparkSession, input_path: str or Path, output_path: str or Path):
+    def __init__(self, spark: SparkSession, input_path: str, output_path: str):
         """
         Initializes the processor.
 
