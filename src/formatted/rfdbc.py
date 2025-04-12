@@ -1,122 +1,344 @@
-    
-# OLD CODE TRANSFORMATIONS FOR RFDBC IN ORDER TO CONVERT TO PARQUET
+import itertools
+from typing import Dict, Any, List
+import json
 
-    # def _transform_data(self, data):
-    #     """Transforms the nested JSON data into a list of records (rows)."""
-    #     if not data or 'dimension' not in data or 'value' not in data or 'id' not in data:
-    #         print("Error: Input data structure is invalid or missing key components.")
-    #         return []
+# --- PySpark Imports ---
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType
+)
+# ---------------------
 
-    #     try:
-    #         dimensions = data['id']
-    #         dim_categories = {
-    #             dim: data['dimension'][dim]['category']['index'] for dim in dimensions
-    #         }
-    #         dim_labels = {
-    #             dim: data['dimension'][dim]['category'].get('label', {}) for dim in dimensions
-    #         }
-    #         values = data['value']
+# --- Delta Lake Package Configuration ---
+DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0"
 
-    #         category_lists = [dim_categories[dim] for dim in dimensions]
-    #         combinations = itertools.product(*category_lists)
+class RFDBCFormattedZone:
+    """
+    Transforms nested JSON-like data (RFDBC structure) into a flat structure
+    with custom output column names and writes it to a Delta Lake table
+    in the Formatted Zone using PySpark.
+    """
 
-    #         records = []
-    #         value_iter = iter(values)
-
-    #         for combo in combinations:
-    #             try:
-    #                 raw_value = next(value_iter) # Renamed to raw_value
-    #             except StopIteration:
-    #                 print("Warning: Ran out of values sooner than expected based on dimension sizes.")
-    #                 break
-
-    #             record = {}
-    #             combo_dict = dict(zip(dimensions, combo))
-
-    #             for dim in dimensions:
-    #                 code = combo_dict[dim]
-    #                 record[f"{dim}_CODE"] = code
-    #                 label = dim_labels[dim].get(code, code)
-    #                 record[f"{dim}_LABEL"] = label
-
-    #             # Convert the value to float if it's not None
-    #             if raw_value is not None:
-    #                 try:
-    #                     record['VALUE'] = float(raw_value)
-    #                 except (ValueError, TypeError):
-    #                     # Handle cases where value might unexpectedly not be convertible
-    #                     print(f"Warning: Could not convert value '{raw_value}' to float for combination {combo}. Setting VALUE to None.")
-    #                     record['VALUE'] = None
-    #             else:
-    #                 record['VALUE'] = None # Keep None as None
-
-    #             records.append(record)
-
-    #         # Check if the total number of values matches the expected product of dimension sizes
-    #         expected_size = 1
-    #         for dim in dimensions:
-    #              expected_size *= len(dim_categories[dim])
-
-    #         if len(values) != expected_size:
-    #              print(f"Warning: Number of values in API data ({len(values)}) does not match calculated expected size ({expected_size}).")
-    #         elif len(records) != len(values):
-    #              print(f"Warning: Number of generated records ({len(records)}) does not match number of values ({len(values)}). Some combinations might be missing values or vice-versa.")
+    def __init__(self, spark: SparkSession, output_path: str, input_data_path: str = "./data/landing/rfdbc.json"):
+        self.spark = spark
+        self.input_data_path = input_data_path
+        self.input_data = self._load_input_data()
+        self.output_path = output_path
+        # Define the mapping from original generated names to desired final names
+        self.column_mapping = self._get_column_mapping()
+        # Define the schema matching the *output* of _transform_data
+        self.intermediate_schema = self._define_intermediate_schema()
+        # Define the *final* desired schema with the new names
+        self.target_schema = self._define_target_schema()
+        print(f"RFDBC Formatted Zone Initialized. Output Delta Path: {self.output_path}")
+        print(f"Column Renaming Map: {self.column_mapping}")
 
 
-    #         return records
+    def _load_input_data(self) -> Dict[str, Any]:
+        """Loads the input data from a JSON file."""
+        try:
+            with open(self.input_data_path, 'r') as file:
+                data = json.load(file)
+            print(f"Input data loaded successfully from {self.input_data_path}.")
+            return data
+        except Exception as e:
+            print(f"Error loading input data from {self.input_data_path}: {e}")
+            return {}
 
-    #     except KeyError as e:
-    #         print(f"Error: Missing expected key in JSON data during transformation: {e}")
-    #         return []
-    #     except Exception as e:
-    #         print(f"An unexpected error occurred during data transformation: {e}")
-    #         return []
+    def _get_column_mapping(self) -> Dict[str, str]:
+        """
+        Defines the mapping from the column names generated by _transform_data
+        to the desired final column names for the Delta table.
+        Keys: Original names (e.g., 'YEAR_CODE').
+        Values: New desired names (e.g., 'ANIO_CODIGO').
+        """
+        return {
+            "YEAR_CODE": "year_code",
+            "YEAR_LABEL": "year_label",
+            "MUN_CODE": "municipality_id",
+            "MUN_LABEL": "municipality_name",
+            "CONCEPT_CODE": "concept_code",
+            "CONCEPT_LABEL": "concept_label",
+            "INDICATOR_CODE": "indicator_code",
+            "INDICATOR_LABEL": "indicator_label",
+            "VALUE": "value"
+        }
+
+    def _define_intermediate_schema(self) -> StructType:
+        """
+        Defines the schema that matches the structure produced *directly*
+        by the _transform_data function (using original dimension names).
+        """
+        # Assumes dimensions are YEAR, MUN, CONCEPT, INDICATOR as per JSON structure
+        # If dimensions could change, this might need to be more dynamic
+        return StructType([
+            StructField("YEAR_CODE", StringType(), True),
+            StructField("YEAR_LABEL", StringType(), True),
+            StructField("MUN_CODE", StringType(), True),
+            StructField("MUN_LABEL", StringType(), True),
+            StructField("CONCEPT_CODE", StringType(), True),
+            StructField("CONCEPT_LABEL", StringType(), True),
+            StructField("INDICATOR_CODE", StringType(), True),
+            StructField("INDICATOR_LABEL", StringType(), True),
+            StructField("VALUE", DoubleType(), True)
+        ])
+
+    def _define_target_schema(self) -> StructType:
+        """
+        Defines the FINAL desired schema for the formatted Delta table
+        using the NEW column names.
+        """
+        # Uses the values from the column_mapping
+        mapping = self.column_mapping
+        return StructType([
+            StructField(mapping.get("YEAR_CODE", "YEAR_CODE"), StringType(), True),
+            StructField(mapping.get("YEAR_LABEL", "YEAR_LABEL"), StringType(), True),
+            StructField(mapping.get("MUN_CODE", "MUN_CODE"), StringType(), True),
+            StructField(mapping.get("MUN_LABEL", "MUN_LABEL"), StringType(), True),
+            StructField(mapping.get("CONCEPT_CODE", "CONCEPT_CODE"), StringType(), True),
+            StructField(mapping.get("CONCEPT_LABEL", "CONCEPT_LABEL"), StringType(), True),
+            StructField(mapping.get("INDICATOR_CODE", "INDICATOR_CODE"), StringType(), True),
+            StructField(mapping.get("INDICATOR_LABEL", "INDICATOR_LABEL"), StringType(), True),
+            StructField(mapping.get("VALUE", "VALUE"), DoubleType(), True)
+        ])
+
+    def _transform_data(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Transforms the nested JSON-like dictionary data into a list of flat records (rows).
+        This function remains UNCHANGED and produces keys like 'YEAR_CODE', 'MUN_CODE', etc.
+        """
+        if not data or 'dimension' not in data or 'value' not in data or 'id' not in data:
+            print("Error: Input data structure is invalid or missing key components.")
+            return []
+
+        try:
+            dimensions = data['id'] # List of dimension names (e.g., ['YEAR', 'MUN', ...])
+            if 'dimension' not in data:
+                print("Error: Missing 'dimension' key in input data.")
+                return []
+
+            dim_categories = {}
+            dim_labels = {}
+            for dim in dimensions:
+                # Defensive checks for nested structure
+                if dim not in data['dimension']:
+                    print(f"Error: Dimension '{dim}' listed in 'id' not found in 'dimension' object.")
+                    return []
+                if 'category' not in data['dimension'][dim]:
+                     print(f"Error: Missing 'category' for dimension '{dim}'.")
+                     return []
+                if 'index' not in data['dimension'][dim]['category']:
+                     print(f"Error: Missing 'category.index' for dimension '{dim}'.")
+                     return []
+
+                dim_categories[dim] = data['dimension'][dim]['category']['index']
+                dim_labels[dim] = data['dimension'][dim]['category'].get('label', {}) # Safely get labels
 
 
-    # def to_parquet(self, raw_data, path):
-    #     """
-    #     Transforms the raw JSON data and saves it to a Parquet file.
-    #     """
-    #     print("Transforming data...")
-    #     records = self._transform_data(raw_data)
+            values = data.get('value', []) # Use .get for safety
 
-    #     if not records:
-    #         print("No records generated from data transformation. Cannot save to Parquet.")
-    #         return
+            category_lists = [dim_categories[dim] for dim in dimensions]
+            combinations = itertools.product(*category_lists)
 
-    #     print(f"Generated {len(records)} records. Initializing Spark Session...")
-    #     spark = None
-    #     try:
-    #         spark = SparkSession.builder \
-    #             .appName("RFDBC Data to Parquet") \
-    #             .getOrCreate()
+            records = []
+            value_iter = iter(values)
 
-    #         print("Defining DataFrame schema...")
-    #         # Define schema explicitly for robustness, especially with potential nulls
-    #         schema = StructType([
-    #             StructField("YEAR_CODE", StringType(), True),
-    #             StructField("YEAR_LABEL", StringType(), True),
-    #             StructField("MUN_CODE", StringType(), True),
-    #             StructField("MUN_LABEL", StringType(), True),
-    #             StructField("CONCEPT_CODE", StringType(), True),
-    #             StructField("CONCEPT_LABEL", StringType(), True),
-    #             StructField("INDICATOR_CODE", StringType(), True),
-    #             StructField("INDICATOR_LABEL", StringType(), True),
-    #             StructField("VALUE", DoubleType(), True) # Use DoubleType for potential decimals or large numbers
-    #         ])
+            # --- Calculate expected size for validation ---
+            expected_size = 1
+            try:
+                for dim in dimensions:
+                    # Check if dim exists and has categories before calculation
+                    if dim in dim_categories and dim_categories[dim] is not None:
+                         expected_size *= len(dim_categories[dim])
+                    else:
+                         print(f"Warning: Dimension '{dim}' has no categories for size calculation.")
+                         expected_size = 0 # Indicate size cannot be calculated reliably
+                         break
+            except Exception as calc_e:
+                print(f"Warning: Could not calculate expected size due to issue with dim_categories: {calc_e}")
+                expected_size = -1 # Indicate calculation failed
 
-    #         print("Creating Spark DataFrame...")
-    #         # Ensure records match the schema order/names if using createDataFrame with schema
-    #         # Adjusting record creation in _transform_data ensures names match
-    #         df = spark.createDataFrame(records, schema=schema)
+            # --- Process Combinations ---
+            processed_count = 0
+            for combo in combinations:
+                try:
+                    raw_value = next(value_iter)
+                except StopIteration:
+                    print(f"Warning: Ran out of values after processing {processed_count} records. Expected based on dimensions: {expected_size if expected_size >= 0 else 'unknown'}.")
+                    break # Stop processing if values run out
 
-    #         print(f"Writing DataFrame to Parquet at {path}...")
-    #         df.write.mode("overwrite").parquet(path) # Use overwrite for initial load, append for updates
-    #         print("Successfully wrote data to Parquet.")
+                record = {}
+                combo_dict = dict(zip(dimensions, combo))
 
-    #     except Exception as e:
-    #         print(f"Error during Spark processing or Parquet writing: {e}")
-    #     finally:
-    #         if spark:
-    #             print("Stopping Spark Session.")
-    #             spark.stop()
+                # Dynamically create CODE and LABEL fields for each dimension
+                # *** This part still uses the original dimension names ***
+                for dim in dimensions:
+                    code = combo_dict[dim]
+                    record[f"{dim}_CODE"] = str(code) # Ensure code is string
+                    label = dim_labels[dim].get(code, str(code)) # Default label to code if missing
+                    record[f"{dim}_LABEL"] = str(label) # Ensure label is string
+
+                # Process the value
+                if raw_value is not None:
+                    try:
+                        # Attempt conversion, handle potential errors gracefully
+                        record['VALUE'] = float(raw_value)
+                    except (ValueError, TypeError):
+                        # print(f"Warning: Could not convert value '{raw_value}' to float for combination {combo}. Setting VALUE to None.")
+                        record['VALUE'] = None # Set to None if conversion fails
+                else:
+                    record['VALUE'] = None # Keep None as None
+
+                records.append(record)
+                processed_count += 1
+
+            # --- Post-processing Validation ---
+            if expected_size >= 0 and len(values) != expected_size:
+                print(f"Warning: Number of values in input data ({len(values)}) does not match calculated expected size based on dimensions ({expected_size}). Data might be incomplete or dimension definitions inconsistent.")
+
+            if processed_count != len(values) and not (expected_size >= 0 and processed_count == expected_size):
+                 # This warning is nuanced. It's mainly relevant if StopIteration didn't occur correctly or if expected_size was calculable.
+                 print(f"Warning: Number of generated records ({processed_count}) differs from number of values ({len(values)}) and potentially the expected size ({expected_size if expected_size >=0 else 'unknown'}). Check for data inconsistencies or value list truncation.")
+
+
+            return records
+
+        except KeyError as e:
+            print(f"Error: Missing expected key in data during transformation: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+        except Exception as e:
+            print(f"An unexpected error occurred during data transformation: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def run(self):
+        """Executes the Formatted Zone processing for the RFDBC data."""
+        print(f"--- Running RFDBC Formatted Zone Task ---")
+        try:
+            # 1. Transform the input Python dictionary data
+            print("Transforming raw data dictionary into records...")
+            records = self._transform_data(self.input_data)
+
+            if not records:
+                print("No records generated from data transformation. Skipping Delta write.")
+                print("--- RFDBC Formatted Zone Task Completed (No Data Written) ---")
+                return
+
+            print(f"Successfully transformed data into {len(records)} records.")
+
+            # 2. Create Spark DataFrame using the INTERMEDIATE schema
+            print("Creating intermediate Spark DataFrame...")
+            # The keys in 'records' MUST match the field names in intermediate_schema
+            df_intermediate = self.spark.createDataFrame(records, schema=self.intermediate_schema)
+
+            print("Intermediate Spark DataFrame created successfully. Schema:")
+            df_intermediate.printSchema()
+
+            # 3. Rename columns to match the TARGET schema
+            print("Renaming columns for final output...")
+            df_formatted = df_intermediate
+            # Using select with alias for potentially better performance and clarity
+            select_exprs = []
+            for original_name, new_name in self.column_mapping.items():
+                 if original_name in df_intermediate.columns:
+                     select_exprs.append(F.col(original_name).alias(new_name))
+                 else:
+                     print(f"Warning: Column '{original_name}' defined in mapping not found in intermediate DataFrame. Skipping rename for this column.")
+
+            # Ensure all columns intended for the target schema are selected
+            if len(select_exprs) != len(self.target_schema.fields):
+                 print(f"Warning: Number of selected columns ({len(select_exprs)}) after renaming does not match target schema fields ({len(self.target_schema.fields)}). Check mapping and intermediate schema.")
+                 # Fallback or error handling could be added here if needed.
+                 # For now, proceed with selected columns.
+                 final_columns = [expr.alias for expr in select_exprs] # Get the names of the columns we are actually selecting
+                 print(f"Proceeding with columns: {final_columns}")
+                 df_formatted = df_intermediate.select(*select_exprs)
+
+            else:
+                 df_formatted = df_intermediate.select(*select_exprs)
+
+
+            print("Columns renamed. Final Schema:")
+            df_formatted.printSchema()
+            # Verify schema matches target (optional but recommended)
+            if df_formatted.schema != self.target_schema:
+                print("Warning: Renamed DataFrame schema does not exactly match target schema definition. This might happen due to ordering or slight type differences if not strictly controlled.")
+                print("Actual Schema:", df_formatted.schema)
+                print("Target Schema:", self.target_schema)
+
+
+            print("Sample data with new column names (first 5 rows):")
+            df_formatted.show(5, truncate=False)
+
+            # 4. Write to Delta Lake using the final DataFrame
+            print(f"Writing formatted data to Delta table: {self.output_path}")
+            df_formatted.write.format("delta") \
+                .mode("overwrite") \
+                .option("overwriteSchema", "true") \
+                .save(self.output_path)
+
+            print(f"Formatted data successfully written to {self.output_path}")
+            print("--- RFDBC Formatted Zone Task Successfully Completed ---")
+
+        except Exception as e:
+            print(f"!!! Error during RFDBC Formatted Zone execution: {e}")
+            import traceback
+            traceback.print_exc()
+            print("--- RFDBC Formatted Zone Task Failed ---")
+
+
+# --- Spark Session Creation Helper (Reused) ---
+def get_spark_session() -> SparkSession:
+	"""
+	Initializes and returns a SparkSession configured for Delta Lake.
+	"""
+	print("Initializing Spark Session...")
+	try:
+		spark = SparkSession.builder \
+			.appName("RFDBCFormattedZone") \
+			.master("local[*]") \
+			.config("spark.jars.packages", DELTA_PACKAGE) \
+			.config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+			.config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+			.config("spark.sql.parquet.int96AsTimestamp", "true") \
+			.config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
+			.config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
+            .config("spark.databricks.delta.schema.autoMerge.enabled", "true")  \
+			.getOrCreate()
+
+		spark.sparkContext.setLogLevel("ERROR") # Reduce verbosity
+		print("Spark Session Initialized. Log level set to ERROR.")
+		return spark
+	except Exception as e:
+		print(f"FATAL: Error initializing Spark Session: {e}")
+		raise
+
+# --- Main Execution Block ---
+if __name__ == "__main__":
+    # ----------------------------------------------------
+
+    OUTPUT_DELTA_PATH = "./data/formatted/rfdc_data" 
+
+    spark = None
+    try:
+        spark = get_spark_session()
+
+        # Instantiate and run the formatter
+        formatter = RFDBCFormattedZone(
+            spark=spark,
+            output_path=OUTPUT_DELTA_PATH
+        )
+        formatter.run()
+
+    except Exception as main_error:
+        print(f"An error occurred in the main execution block: {main_error}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        if spark:
+            print("Stopping Spark Session.")
+            spark.stop()

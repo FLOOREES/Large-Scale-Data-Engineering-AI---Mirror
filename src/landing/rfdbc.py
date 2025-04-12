@@ -5,10 +5,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
 
 class RFDBC:
-    """
-    Fetches data from the Idescat RFDBC API and saves it to Parquet.
-    API documentation: https://www.idescat.cat/pub/?id=rfdbc
-    """
     def __init__(self) -> None:
         # URL for specific table: RFDB i RFDB per habitant. Municipis. 2010-2021.
         self.api_url = "https://api.idescat.cat/taules/v2/rfdbc/13301/14148/mun/data"
