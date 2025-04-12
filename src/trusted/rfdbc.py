@@ -1,7 +1,5 @@
-import sys
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType # Might be needed for isnan if checking floats
 
 # --- Delta Lake Package Configuration ---
 DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Or your desired Delta version
@@ -11,12 +9,10 @@ class RFDBCTrustedZone:
     Applies cleaning and transformation rules to data from the Formatted Zone
     and saves the result to a Trusted Zone Delta table.
 
-    Processes include:
-    - Removing specific columns.
-    - Renaming columns.
-    - Removing duplicate rows.
-    - Identifying municipalities associated with any missing data and removing all their rows.
-    - Removing any other rows with remaining missing values.
+    Processing steps separated into methods:
+    - remove_columns: Removes specific columns.
+    - modify_columns: Renames columns and applies modifications (e.g., municipality code).
+    - remove_rows: Handles duplicates and missing value strategies.
     """
 
     def __init__(self, spark: SparkSession, input_path: str, output_path: str):
@@ -37,39 +33,72 @@ class RFDBCTrustedZone:
             return df
         except Exception as e:
             print(f"ERROR: Failed to load data from {self.input_path}. Error: {e}")
-            # Raise a more specific error or exit if loading is critical
             raise RuntimeError(f"Could not load input data from {self.input_path}") from e
 
     def remove_columns(self, df: DataFrame) -> DataFrame:
-        """Removes specified columns and renames others."""
-        print("\n--- Step: Removing and Renaming Columns ---")
+        """Removes specified columns."""
+        print("\n--- Step: Removing Columns ---")
         cols_to_drop = ["concept_code", "concept_label", "year_code"]
-        col_to_rename = "year_label"
-        new_name = "year"
 
-        # Check if columns exist before attempting to drop/rename
+        # Check if columns exist before attempting to drop
         actual_cols_to_drop = [col for col in cols_to_drop if col in df.columns]
         if len(actual_cols_to_drop) < len(cols_to_drop):
             missing = set(cols_to_drop) - set(actual_cols_to_drop)
             print(f"Warning: Columns to drop not found: {missing}")
 
+        if not actual_cols_to_drop:
+             print("No columns to drop found or specified.")
+             return df # Return original df if nothing to drop
+
         df_dropped = df.drop(*actual_cols_to_drop)
         print(f"Columns dropped: {actual_cols_to_drop}")
+        print("Schema after column removal:")
+        df_dropped.printSchema()
+        return df_dropped
 
-        df_renamed = df_dropped
-        if col_to_rename in df_dropped.columns:
-            df_renamed = df_dropped.withColumnRenamed(col_to_rename, new_name)
+    def modify_columns(self, df: DataFrame) -> DataFrame:
+        """Renames specified columns and applies modifications."""
+        print("\n--- Step: Modifying Columns (Rename & Adjustments) ---")
+        df_modified = df
+
+        # --- 1. Rename Columns ---
+        col_to_rename = "year_label"
+        new_name = "year"
+
+        if col_to_rename in df_modified.columns:
+            df_modified = df_modified.withColumnRenamed(col_to_rename, new_name)
             print(f"Renamed column '{col_to_rename}' to '{new_name}'.")
         else:
-             print(f"Warning: Column to rename '{col_to_rename}' not found.")
+            print(f"Warning: Column to rename '{col_to_rename}' not found.")
 
-        print("Schema after column removal/rename:")
-        df_renamed.printSchema()
-        return df_renamed
+        # --- 2. Modify Municipality Code/ID ---
+        # Assuming the column name is 'municipality_id' from the previous steps
+        mun_col = "municipality_id"
+        if mun_col in df_modified.columns:
+            print(f"Modifying column '{mun_col}': Removing last digit.")
+            # Use substring: start at position 1, length is original length - 1
+            # Ensure the column is treated as string for length check
+            df_modified = df_modified.withColumn(
+                mun_col,
+                F.expr(f"substring({mun_col}, 1, length(cast({mun_col} as string)) - 1)")
+            )
+            # Optional: You might want to cast back to original type if needed,
+            # but removing a digit likely keeps it as a string effectively.
+            print(f"Applied modification to '{mun_col}'.")
+        else:
+            print(f"Warning: Column '{mun_col}' not found for modification.")
+
+        print("Schema after column modifications:")
+        df_modified.printSchema()
+        # Optional: Show sample data to verify modification
+        # print("Sample data after modification:")
+        # df_modified.select(mun_col).distinct().show(5)
+        return df_modified
 
     def remove_rows(self, df: DataFrame) -> DataFrame:
         """
         Removes duplicate rows and handles missing values according to the defined strategy.
+        (Logic remains the same as the previous version)
         1. Removes exact duplicates.
         2. Finds municipalities associated with any missing data and removes all their rows.
         3. Removes any remaining rows with missing data.
@@ -93,7 +122,7 @@ class RFDBCTrustedZone:
 
         # --- 2. Identify and Remove Rows for Municipalities with Missing Data ---
         print("\nIdentifying municipalities associated with missing data...")
-        municipality_id_col = "municipality_id" # Make sure this matches your column name
+        municipality_id_col = "municipality_id" # This should match the name *after* modification step
 
         if municipality_id_col not in df_deduplicated.columns:
             print(f"Warning: Column '{municipality_id_col}' not found. Skipping municipality-based removal.")
@@ -101,55 +130,44 @@ class RFDBCTrustedZone:
         else:
             # Build filter expression for rows with *any* missing value
             missing_filter_expr = None
-            # Check all columns currently in the df_deduplicated DataFrame
             for c in df_deduplicated.columns:
-                # Handle potential Float/Double NaN values as well as Nulls
                 col_check = F.col(c).isNull()
                 if dict(df_deduplicated.dtypes)[c] in ('double', 'float'):
                      col_check = col_check | F.isnan(F.col(c))
-
                 if missing_filter_expr is None:
                     missing_filter_expr = col_check
                 else:
-                    missing_filter_expr = missing_filter_expr | col_check # Combine with OR
+                    missing_filter_expr = missing_filter_expr | col_check
 
-            # Get rows that actually have missing data
             missing_rows_df = df_deduplicated.filter(missing_filter_expr)
             missing_rows_count = missing_rows_df.count()
 
             if missing_rows_count > 0:
                 print(f"Found {missing_rows_count} rows containing at least one missing value.")
-
                 # Get distinct municipality IDs from these rows
+                # Note: these IDs will be the *modified* ones (last digit removed)
                 mun_ids_with_missing = missing_rows_df.select(municipality_id_col).distinct()
-
-                # Collect the list of municipality IDs to the driver
-                # WARNING: This can cause memory issues if the number of distinct municipalities
-                # with missing data is extremely large. Consider alternatives for huge scale.
                 mun_ids_list = [row[municipality_id_col] for row in mun_ids_with_missing.collect()]
 
                 if mun_ids_list:
-                    print(f"Identified {len(mun_ids_list)} municipalities associated with missing data: {mun_ids_list}")
-                    print(f"Removing ALL rows for these municipalities...")
-
-                    # Filter out rows where municipality_id is in the collected list
+                    print(f"Identified {len(mun_ids_list)} modified municipality IDs associated with missing data: {mun_ids_list}")
+                    print(f"Removing ALL rows for these modified IDs...")
+                    # Filter out rows where the *modified* municipality_id is in the collected list
                     df_filtered_mun = df_deduplicated.filter(~F.col(municipality_id_col).isin(mun_ids_list))
                     filtered_mun_count = df_filtered_mun.count()
                     mun_rows_removed = deduplicated_count - filtered_mun_count
-                    print(f"Removed {mun_rows_removed} rows belonging to identified municipalities.")
+                    print(f"Removed {mun_rows_removed} rows belonging to identified modified IDs.")
                     print(f"Rows after municipality-based removal: {filtered_mun_count}")
-
                 else:
-                    print("No specific municipality IDs found associated with the missing rows (this is unexpected if missing rows were found).")
-                    df_filtered_mun = df_deduplicated # Proceed without filtering
+                    print("No specific municipality IDs found associated with the missing rows.")
+                    df_filtered_mun = df_deduplicated
             else:
                 print("No rows with missing values found. Skipping municipality-based removal.")
-                df_filtered_mun = df_deduplicated # No missing data, so no municipalities to filter
+                df_filtered_mun = df_deduplicated
 
         # --- 3. Remove Any Other Rows with Missing Values ---
         print("\nRemoving any remaining rows with missing values...")
         count_before_final_na_drop = df_filtered_mun.count()
-        # dropna applies to all columns by default with how='any'
         df_cleaned = df_filtered_mun.dropna(how='any')
         final_count = df_cleaned.count()
         final_na_removed = count_before_final_na_drop - final_count
@@ -159,10 +177,7 @@ class RFDBCTrustedZone:
              print("No further rows with missing values found to remove.")
 
         print(f"Final row count after all cleaning: {final_count}")
-
-        # Unpersist the cached DataFrame
         df_deduplicated.unpersist()
-
         return df_cleaned
 
     def run(self):
@@ -173,13 +188,16 @@ class RFDBCTrustedZone:
             return
 
         try:
-            # Step 1: Remove/Rename Columns
-            df_cols_processed = self.remove_columns(self.initial_df)
+            # Step 1: Remove Columns
+            df_cols_removed = self.remove_columns(self.initial_df)
 
-            # Step 2: Remove Rows (Duplicates & Missing Handling)
-            df_cleaned = self.remove_rows(df_cols_processed)
+            # Step 2: Modify Columns (Rename, Adjustments)
+            df_cols_modified = self.modify_columns(df_cols_removed)
 
-            # Step 3: Final Inspection (Optional but recommended)
+            # Step 3: Remove Rows (Duplicates & Missing Handling)
+            df_cleaned = self.remove_rows(df_cols_modified)
+
+            # Step 4: Final Inspection (Optional but recommended)
             print("\n--- Final Inspection Before Save ---")
             print("Final Schema:")
             df_cleaned.printSchema()
@@ -187,7 +205,7 @@ class RFDBCTrustedZone:
             print("Sample of final data (first 10 rows):")
             df_cleaned.show(10, truncate=False)
 
-            # Step 4: Save to Trusted Zone Delta Lake
+            # Step 5: Save to Trusted Zone Delta Lake
             print(f"\nSaving cleaned data to Delta table: {self.output_path}")
             df_cleaned.write.format("delta") \
                 .mode("overwrite") \
@@ -214,12 +232,9 @@ def get_spark_session() -> SparkSession:
             .config("spark.jars.packages", DELTA_PACKAGE) \
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.sql.parquet.int96AsTimestamp", "true") \
-            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
             .config("spark.databricks.delta.schema.autoMerge.enabled", "true") \
             .getOrCreate()
-        spark.sparkContext.setLogLevel("WARN") # Adjust log level as needed
+        spark.sparkContext.setLogLevel("WARN")
         print("Spark Session Initialized.")
         return spark
     except Exception as e:
@@ -230,7 +245,7 @@ def get_spark_session() -> SparkSession:
 if __name__ == "__main__":
     # Define paths
     INPUT_DELTA_PATH = "./data/formatted/rfdbc_data" # Assumes output from RFDBCFormattedZone
-    OUTPUT_DELTA_PATH = "./data/trusted/rfdbc_data"
+    OUTPUT_DELTA_PATH = "./data/trusted/rfdbc_data" # Use different path to avoid conflicts
 
     spark = None
     try:
@@ -256,7 +271,6 @@ if __name__ == "__main__":
         except Exception as read_e:
             print(f"Warning: Error reading back final Delta table: {read_e}")
         # ------------------------------------
-
 
     except Exception as main_error:
         print(f"An error occurred in the main execution block: {main_error}")
