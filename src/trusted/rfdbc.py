@@ -1,10 +1,6 @@
-import sys
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType, IntegerType # Import IntegerType for casting
-
-# --- Delta Lake Package Configuration ---
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Or your desired Delta version
+from pyspark.sql.types import IntegerType # Import IntegerType for casting
 
 class RFDBCTrustedZone:
     """
@@ -17,7 +13,7 @@ class RFDBCTrustedZone:
     - remove_rows: Removes duplicates and enforces denial constraints (data quality rules).
     """
 
-    def __init__(self, spark: SparkSession, input_path: str, output_path: str):
+    def __init__(self, spark: SparkSession, input_path: str = "./data/formatted/rfdbc", output_path: str = "./data/trusted/rfdbc"):
         self.spark = spark
         self.input_path = input_path
         self.output_path = output_path
@@ -214,31 +210,9 @@ class RFDBCTrustedZone:
             print("--- RFDBC Trusted Zone Processing Failed ---")
 
 
-# --- Spark Session Creation Helper ---
-def get_spark_session() -> SparkSession:
-    """Initializes and returns a SparkSession configured for Delta Lake."""
-    print("Initializing Spark Session...")
-    try:
-        spark = SparkSession.builder \
-            .appName("RFDBCTrustedZone") \
-            .master("local[*]") \
-            .config("spark.jars.packages", DELTA_PACKAGE) \
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.databricks.delta.schema.autoMerge.enabled", "true") \
-            .getOrCreate()
-        spark.sparkContext.setLogLevel("WARN")
-        print("Spark Session Initialized.")
-        return spark
-    except Exception as e:
-        print(f"FATAL: Error initializing Spark Session: {e}")
-        raise
-
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    # Define paths
-    INPUT_DELTA_PATH = "./data/formatted/rfdbc_data"
-    OUTPUT_DELTA_PATH = "./data/trusted/rfdbc_data"
+    from src.spark_session import get_spark_session
 
     spark = None
     try:
@@ -246,26 +220,9 @@ if __name__ == "__main__":
 
         # Instantiate and run the Trusted Zone processor
         processor = RFDBCTrustedZone(
-            spark=spark,
-            input_path=INPUT_DELTA_PATH,
-            output_path=OUTPUT_DELTA_PATH
+            spark=spark
         )
         processor.run()
-
-        # --- Verification Step ---
-        print("\n--- Verifying Output Delta Table Contents ---")
-        try:
-            df_read = spark.read.format("delta").load(OUTPUT_DELTA_PATH)
-            print(f"Successfully read final Delta table from {OUTPUT_DELTA_PATH}")
-            print("Final Schema:")
-            df_read.printSchema()
-            print("Final Data:")
-            df_read.show(truncate=False)
-            # EXPECTED OUTPUT: Only the first 3 rows from dummy_data_constraints should remain
-            # (after removing the duplicate of the first row).
-        except Exception as read_e:
-            print(f"Warning: Error reading back final Delta table: {read_e}")
-        # ------------------------------------
 
     except Exception as main_error:
         print(f"An error occurred in the main execution block: {main_error}")

@@ -1,11 +1,5 @@
-# --- PySpark Imports ---
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-
-# ---------------------
-
-# --- Delta Lake Package Configuration ---
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Example: Use 2.4.0 for Spark 3.3
 
 class IdescatTrustedZone:
     """
@@ -13,14 +7,14 @@ class IdescatTrustedZone:
     applying quality rules and deduplication before saving to the Trusted Zone.
     """
 
-    def __init__(self, spark: SparkSession, input_path: str, output_path: str):
+    def __init__(self, spark: SparkSession, input_path: str = "./data/formatted/idescat", output_path: str = "./data/trusted/idescat"):
         """
         Initializes the processor.
 
         Args:
             spark: An active SparkSession configured for Delta Lake.
-            input_path: Path to the input Delta table (e.g., './data/formatted/idescat_indicators').
-            output_path: Path for the output Delta Lake table (e.g., './data/trusted/idescat_indicators').
+            input_path: Path to the input Delta table (e.g., './data/formatted/idescat').
+            output_path: Path for the output Delta Lake table (e.g., './data/trusted/idescat').
         """
         self.spark = spark
         self.input_path = str(input_path)
@@ -120,44 +114,15 @@ class IdescatTrustedZone:
             traceback.print_exc()
             print("--- Idescat Trusted Zone Task Failed ---")
 
-
-# --- Spark Session Creation Helper (Identical to Formatted Zone) ---
-def get_spark_session() -> SparkSession:
-    """
-    Initializes and returns a SparkSession configured for Delta Lake
-    and updated Parquet compatibility settings.
-    """
-    print("Initializing Spark Session...")
-    try:
-        spark = SparkSession.builder \
-            .appName("IdescatTrustedZone") \
-            .master("local[*]") \
-            .config("spark.jars.packages", DELTA_PACKAGE) \
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.sql.parquet.int96AsTimestamp", "true") \
-            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-            .getOrCreate()
-
-        spark.sparkContext.setLogLevel("ERROR")
-        print("Spark Session Initialized. Log level set to ERROR.")
-        return spark
-    except Exception as e:
-        print(f"FATAL: Error initializing Spark Session: {e}")
-        raise
-
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    # Define paths for direct execution
-    INPUT_DELTA_FORMATTED = "./data/formatted/idescat" # Read from Formatted
-    OUTPUT_DELTA_TRUSTED = "./data/trusted/idescat"   # Write to Trusted
+    from src.spark_session import get_spark_session
 
     spark = None
     try:
         spark = get_spark_session()
         # Instantiate and run the processor
-        truster = IdescatTrustedZone(spark=spark, input_path=INPUT_DELTA_FORMATTED, output_path=OUTPUT_DELTA_TRUSTED)
+        truster = IdescatTrustedZone(spark=spark)
         truster.run()
     except Exception as main_error:
         print(f"An error occurred outside the run method: {main_error}")

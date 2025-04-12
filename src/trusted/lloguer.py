@@ -1,20 +1,9 @@
-# trusted_zone_lloguer.py
-
 from pathlib import Path
-from typing import Optional, Union
 import datetime # To get current year
 
 # --- PySpark Imports ---
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.window import Window # Import Window
-from pyspark.sql.types import (
-    StructType, StructField, StringType, IntegerType, DoubleType
-)
-# ---------------------
-
-# --- Delta Lake Package Configuration (Keep consistent) ---
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Ensure this version is compatible
 
 class LloguerTrustedZone:
     """
@@ -24,18 +13,18 @@ class LloguerTrustedZone:
     for duplicate keys with differing values.
     """
 
-    def __init__(self, spark: SparkSession, input_path: Union[str, Path] = None, output_path: Union[str, Path] = None):
+    def __init__(self, spark: SparkSession, input_path: str = "./data/formatted/lloguer", output_path: str = "./data/trusted/lloguer"):
         """
         Initializes the processor.
 
         Args:
             spark: An active SparkSession configured for Delta Lake.
-            input_path: Path to the input Delta table (e.g., './data/formatted/lloguer_catalunya').
-            output_path: Path for the output Delta Lake table (e.g., './data/trusted/lloguer_catalunya').
+            input_path: Path to the input Delta table (e.g., './data/formatted/lloguer').
+            output_path: Path for the output Delta Lake table (e.g., './data/trusted/lloguer').
         """
         self.spark = spark
-        self.input_path = str(input_path) if input_path else "./data/formatted/lloguer"
-        self.output_path = str(output_path) if output_path else "./data/trusted/lloguer"
+        self.input_path = str(input_path)
+        self.output_path = str(output_path)
         # Schema is expected to be the same as the formatted output
         print(f"Lloguer Trusted Zone Initialized.")
         print(f"  Input Formatted Path: {self.input_path}")
@@ -196,47 +185,15 @@ class LloguerTrustedZone:
             traceback.print_exc()
             print("--- Lloguer Trusted Zone Task Failed ---")
 
-
-# --- Spark Session Creation Helper (Identical) ---
-def get_spark_session() -> SparkSession:
-    """Initializes and returns a SparkSession configured for Delta Lake."""
-    print("Initializing Spark Session...")
-    # ... (rest of the function is identical, no changes needed)
-    try:
-        spark = SparkSession.builder \
-            .appName("LloguerTrustedZone") \
-            .master("local[*]") \
-            .config("spark.jars.packages", DELTA_PACKAGE) \
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.sql.parquet.int96AsTimestamp", "true") \
-            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-            .getOrCreate()
-
-        spark.sparkContext.setLogLevel("ERROR") # Reduce verbosity
-        print("Spark Session Initialized. Log level set to ERROR.")
-        return spark
-    except Exception as e:
-        print(f"FATAL: Error initializing Spark Session: {e}")
-        raise
-
 # --- Main Execution Block (Identical) ---
 if __name__ == "__main__":
-    # ... (main block is identical, no changes needed)
-    INPUT_DELTA_FORMATTED = "./data/formatted/lloguer"
-    OUTPUT_DELTA_TRUSTED = "./data/trusted/lloguer"
-    Path(OUTPUT_DELTA_TRUSTED).parent.mkdir(parents=True, exist_ok=True)
     spark = None
     try:
+        from src.spark_session import get_spark_session
+
         spark = get_spark_session()
-        formatted_log_path = Path(INPUT_DELTA_FORMATTED) / "_delta_log"
-        if not formatted_log_path.is_dir():
-            print(f"Error: Input Formatted Delta table log not found at {formatted_log_path}")
-            print("Please run the Lloguer formatted zone script first.")
-        else:
-            truster = LloguerTrustedZone(spark=spark, input_path=INPUT_DELTA_FORMATTED, output_path=OUTPUT_DELTA_TRUSTED)
-            truster.run(verbose=True) # Keep verbose=True to see the check results
+        truster = LloguerTrustedZone(spark=spark)
+        truster.run(verbose=True) # Keep verbose=True to see the check results
     except Exception as main_error:
         print(f"An unexpected error occurred in the main execution block: {main_error}")
         import traceback
