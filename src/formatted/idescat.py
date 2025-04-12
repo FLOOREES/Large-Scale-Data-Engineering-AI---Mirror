@@ -4,11 +4,6 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import (
     StructType, StructField, StringType, IntegerType, DoubleType, TimestampType, LongType
 )
-# ---------------------
-
-# --- Delta Lake Package Configuration ---
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0"
-
 
 class IdescatFormattedZone:
     """
@@ -16,7 +11,7 @@ class IdescatFormattedZone:
     applies schema and types, and writes to a Delta Lake table in the Formatted Zone.
     """
 
-    def __init__(self, spark: SparkSession, input_path: str, output_path: str):
+    def __init__(self, spark: SparkSession, input_path: str = "./data/landing/idescat.parquet", output_path: str = "./data/formatted/idescat"):
         self.spark = spark
         self.input_path = str(input_path)
         self.output_path = str(output_path)
@@ -140,43 +135,14 @@ class IdescatFormattedZone:
             traceback.print_exc()
             print("--- Idescat Formatted Zone Task Failed ---")
 
-
-# --- Spark Session Creation Helper (No changes needed here from previous fix) ---
-def get_spark_session() -> SparkSession:
-    """
-    Initializes and returns a SparkSession configured for Delta Lake
-    and updated Parquet compatibility settings.
-    """
-    print("Initializing Spark Session...")
-    try:
-        # Ensure consistent indentation for all chained methods
-        spark = SparkSession.builder \
-            .appName("IdescatFormattedZoneSimple") \
-            .master("local[*]") \
-            .config("spark.jars.packages", DELTA_PACKAGE) \
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.sql.parquet.int96AsTimestamp", "true") \
-            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-            .getOrCreate()
-
-        spark.sparkContext.setLogLevel("ERROR")
-        print("Spark Session Initialized. Log level set to ERROR.")
-        return spark
-    except Exception as e:
-        print(f"FATAL: Error initializing Spark Session: {e}")
-        raise
-
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    INPUT_PARQUET = "./data/landing/idescat.parquet" # Make sure this file exists
-    OUTPUT_DELTA = "./data/formatted/idescat"
+    from src.spark_session import get_spark_session
 
     spark = None
     try:
         spark = get_spark_session()
-        formatter = IdescatFormattedZone(spark=spark, input_path=INPUT_PARQUET, output_path=OUTPUT_DELTA)
+        formatter = IdescatFormattedZone(spark=spark)
         formatter.run()
     except Exception as main_error:
         print(f"An error occurred outside the run method: {main_error}")

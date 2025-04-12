@@ -10,9 +10,6 @@ from pyspark.sql.types import (
 )
 # ---------------------
 
-# --- Delta Lake Package Configuration ---
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0"
-
 class RFDBCFormattedZone:
     """
     Transforms nested JSON-like data (RFDBC structure) into a flat structure
@@ -290,47 +287,16 @@ class RFDBCFormattedZone:
             traceback.print_exc()
             print("--- RFDBC Formatted Zone Task Failed ---")
 
-
-# --- Spark Session Creation Helper (Reused) ---
-def get_spark_session() -> SparkSession:
-	"""
-	Initializes and returns a SparkSession configured for Delta Lake.
-	"""
-	print("Initializing Spark Session...")
-	try:
-		spark = SparkSession.builder \
-			.appName("RFDBCFormattedZone") \
-			.master("local[*]") \
-			.config("spark.jars.packages", DELTA_PACKAGE) \
-			.config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-			.config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-			.config("spark.sql.parquet.int96AsTimestamp", "true") \
-			.config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-			.config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-            .config("spark.databricks.delta.schema.autoMerge.enabled", "true")  \
-			.getOrCreate()
-
-		spark.sparkContext.setLogLevel("ERROR") # Reduce verbosity
-		print("Spark Session Initialized. Log level set to ERROR.")
-		return spark
-	except Exception as e:
-		print(f"FATAL: Error initializing Spark Session: {e}")
-		raise
-
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    # ----------------------------------------------------
-
-    OUTPUT_DELTA_PATH = "./data/formatted/rfdbc" 
-
+    from src.spark_session import get_spark_session
     spark = None
     try:
         spark = get_spark_session()
 
         # Instantiate and run the formatter
         formatter = RFDBCFormattedZone(
-            spark=spark,
-            output_path=OUTPUT_DELTA_PATH
+            spark=spark
         )
         formatter.run()
 

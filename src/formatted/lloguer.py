@@ -1,18 +1,11 @@
-# formatted_zone_lloguer.py
-
 from pathlib import Path
-from typing import Optional, Union
 
 # --- PySpark Imports ---
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     StructType, StructField, StringType, IntegerType, DoubleType
 )
-# ---------------------
-
-# --- Delta Lake Package Configuration (Keep consistent) ---
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Ensure this version is compatible with your Spark/Scala
 
 class LloguerFormattedZone:
     """
@@ -21,7 +14,7 @@ class LloguerFormattedZone:
     Includes an option for verbose output inspection.
     """
 
-    def __init__(self, spark: SparkSession, input_path: Union[str, Path], output_path: Union[str, Path]):
+    def __init__(self, spark: SparkSession, input_path: str = "./data/landing/lloguer.parquet", output_path: str = "./data/formatted/lloguer"):
         """
         Initializes the formatter.
 
@@ -149,50 +142,16 @@ class LloguerFormattedZone:
             traceback.print_exc()
             print("--- Lloguer Formatted Zone Task Failed ---")
 
-
-# --- Spark Session Creation Helper (No changes needed here) ---
-def get_spark_session() -> SparkSession:
-    """
-    Initializes and returns a SparkSession configured for Delta Lake.
-    """
-    print("Initializing Spark Session...")
-    try:
-        spark = SparkSession.builder \
-            .appName("LloguerFormattedZone") \
-            .master("local[*]") \
-            .config("spark.jars.packages", DELTA_PACKAGE) \
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.sql.parquet.int96AsTimestamp", "true") \
-            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-            .getOrCreate()
-
-        spark.sparkContext.setLogLevel("ERROR") # Reduce verbosity
-        print("Spark Session Initialized. Log level set to ERROR.")
-        return spark
-    except Exception as e:
-        print(f"FATAL: Error initializing Spark Session: {e}")
-        raise
-
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    INPUT_PARQUET = "./data/landing/lloguer.parquet"   # Input from Lloguer landing script
-    OUTPUT_DELTA = "./data/formatted/lloguer" # Output Delta table path
-
-    Path(OUTPUT_DELTA).parent.mkdir(parents=True, exist_ok=True) # Ensure formatted dir exists
+    from src.spark_session import get_spark_session
 
     spark = None
     try:
         spark = get_spark_session()
-        input_path_obj = Path(INPUT_PARQUET)
-        if not input_path_obj.is_file():
-             print(f"Error: Input Parquet file not found at {INPUT_PARQUET}")
-             print("Please run the Lloguer landing zone script first.")
-        else:
-            formatter = LloguerFormattedZone(spark=spark, input_path=INPUT_PARQUET, output_path=OUTPUT_DELTA)
-            # Set verbose=True to inspect the output Delta table after writing
-            formatter.run(verbose=True)
+        formatter = LloguerFormattedZone(spark=spark)
+        # Set verbose=True to inspect the output Delta table after writing
+        formatter.run(verbose=True)
 
     except Exception as main_error:
         print(f"An unexpected error occurred in the main execution block: {main_error}")
