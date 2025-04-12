@@ -9,7 +9,9 @@ class Pipeline:
 	"""
 	Main class to orchestrate the data pipeline.
 	"""
-	def __init__(self, spark: SparkSession):
+	def __init__(self, spark: SparkSession, max_stage: int = 4):
+		assert max_stage in [1, 2, 3, 4], "max_stage must be between 1 and 4"
+		self.max_stage = max_stage
 		self.spark = spark
 		self.landing = LandingZone() # No spark is used in landing zone
 		self.formatted = FormattedZone(spark=self.spark)
@@ -18,6 +20,9 @@ class Pipeline:
 
 	def run(self):
 		self.landing.run()
-		self.formatted.run()
-		self.trusted.run()
-		self.exploitation.run()
+		if self.max_stage >= 2:
+			self.formatted.run()
+		if self.max_stage >= 3:
+			self.trusted.run()
+		if self.max_stage >= 4:
+			self.exploitation.run()
