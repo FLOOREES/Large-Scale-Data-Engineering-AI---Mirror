@@ -2,7 +2,8 @@ import requests
 import pandas as pd
 import time
 import logging
-from typing import List, Dict, Any
+import os
+from typing import List, Dict, Any, Optional
 import pyarrow # Ensure pyarrow is available
 
 # --- Configuration ---
@@ -15,12 +16,22 @@ logger = logging.getLogger(__name__)
 
 # --- Data Collector Class ---
 class Lloguer:
+    """
+    Collects paginated rent data from an API and saves it to a Parquet file,
+    overwriting any existing file. Uses Pandas and PyArrow.
+    Relies on standard exceptions for error handling.
+    """
     def __init__(self):
+        # --- Configuration moved inside __init__ for encapsulation ---
         self.api_url = "https://analisi.transparenciacatalunya.cat/resource/qww9-bvhh.json"
-        self.output_parquet_path = "./data/landing/lloguer.parquet"
+        # Define base output dir and filename separately
+        self.output_dir = "./data/landing/"
+        self.output_filename = "lloguer_catalunya.parquet"
+        self.output_parquet_path = os.path.join(self.output_dir, self.output_filename)
         self.request_limit = 1000
         self.request_delay = 0.5
         self.timeout = 60
+        # ----------------------------------------------------------
 
         logger.info(f"Lloguer initialized:")
         logger.info(f"  API URL: {self.api_url}")
@@ -42,6 +53,7 @@ class Lloguer:
                 logger.debug(f"Empty response body received for offset {offset}.")
                 return [] # End of data for this page
 
+            # Check if response is valid JSON before returning
             return response.json()
 
         # Catch specific requests exceptions first for potentially better context
@@ -54,8 +66,12 @@ class Lloguer:
         except requests.exceptions.RequestException as e:
             logger.error(f"Network error during request for offset {offset}: {e}", exc_info=True)
             raise
-        except ValueError as e: # Catches JSONDecodeError
+        except ValueError as e: # Catches json.JSONDecodeError
             logger.error(f"Failed to decode JSON response for offset {offset}", exc_info=True)
+            # Add response text to log if possible
+            try:
+                 logger.error(f"Response text causing JSON error: {response.text[:500]}...")
+            except Exception: pass # Ignore errors during logging response text
             raise
 
     def fetch_all_data(self) -> List[Dict[str, Any]]:
@@ -97,11 +113,10 @@ class Lloguer:
         Raises exceptions on errors.
         """
         if data is None:
-            # Let caller handle None if needed, or raise error here
             raise ValueError("Input data cannot be None for saving.")
         if not data:
             logger.warning("No data provided (empty list). Skipping Parquet save.")
-            return
+            return 0 # Return 0 records saved
 
         logger.info(f"Preparing to save {len(data)} records to {self.output_parquet_path} (overwrite mode).")
 
@@ -109,13 +124,20 @@ class Lloguer:
             df = pd.DataFrame(data)
             if df.empty:
                 logger.warning("Created DataFrame is empty. Skipping Parquet save.")
-                return
+                return 0
+
+            # Ensure output directory exists before writing
+            output_dir_path = os.path.dirname(self.output_parquet_path)
+            if output_dir_path: # Check if path has a directory part
+                 os.makedirs(output_dir_path, exist_ok=True)
 
             logger.info(f"Writing {len(df)} records using engine 'pyarrow'...")
             start_time = time.time()
+            # Use pyarrow engine, specify index=False unless the index is meaningful
             df.to_parquet(self.output_parquet_path, engine='pyarrow', index=False)
             end_time = time.time()
             logger.info(f"Successfully saved data to {self.output_parquet_path} in {end_time - start_time:.2f} seconds.")
+            return len(df) # Return number of records saved
 
         except (ValueError, TypeError) as e:
             logger.error(f"Error processing data for Parquet saving: {e}", exc_info=True)
@@ -127,25 +149,72 @@ class Lloguer:
              logger.error(f"An unexpected error occurred during Parquet save: {e}", exc_info=True)
              raise
 
-    def run(self, mode: str = "overwrite"):
+    def _inspect_output_file(self):
+        """Reads the saved parquet file and prints basic info."""
+        logger.info(f"--- Inspecting Saved File: {self.output_parquet_path} ---")
+        if not os.path.exists(self.output_parquet_path):
+             logger.error("Inspection failed: Output file not found.")
+             return
+
+        try:
+            df_check = pd.read_parquet(self.output_parquet_path, engine='pyarrow')
+            logger.info(f"Successfully read back {len(df_check)} records for inspection.")
+
+            # 1. Show Schema/Info
+            logger.info("\nDataFrame Info (Schema):")
+            print("-------------------- Schema --------------------")
+            df_check.info(verbose=True, show_counts=True) # More detailed info
+            print("------------------------------------------------")
+
+            # 2. Show Sample Data
+            logger.info("\nSample Data (First 5 rows):")
+            print("-------------------- Sample --------------------")
+            print(df_check.head().to_string())
+            print("------------------------------------------------")
+
+            # 3. Optional: Add more specific checks if needed later
+            # e.g., check for nulls in key columns, count distinct values, etc.
+
+        except Exception as inspect_err:
+            logger.error(f"Inspection failed: Error reading or processing the Parquet file: {inspect_err}", exc_info=True)
+
+
+    def run(self, verbose: bool = False):
         """
         Executes the full pipeline: fetch all data and save (overwrite).
+        Optionally inspects the saved file if verbose is True.
         Logs results or errors. Does not return a value.
         Raises exceptions on failure.
+
+        Args:
+            verbose (bool): If True, inspect the saved Parquet file after writing. Defaults to False.
         """
-        assert mode in ["overwrite", "append"], "Invalid mode. Use 'overwrite' or 'append'."
-        
-        logger.info(f"--- Starting Lloguer Run ---")
+        logger.info(f"--- Starting Lloguer Run (Verbose: {verbose}) ---")
+        saved_count = False # Initialize to False to indicate no records saved yet
         try:
             fetched_data = self.fetch_all_data()
 
             if fetched_data:
-                 self.save_to_parquet(fetched_data)
-                 logger.info(f"--- Lloguer Run Completed Successfully. Saved {len(fetched_data)} records. ---")
+                 saved_count = self.save_to_parquet(fetched_data) # save_to_parquet now returns count
+                 logger.info(f"--- Lloguer Run Completed Successfully. Saved {saved_count} records. ---")
+
+                 # Perform inspection if requested and save was successful
+                 if verbose and saved_count > 0:
+                      self._inspect_output_file()
+
             else:
                  logger.info("--- Lloguer Run Completed: No data fetched or saved. ---")
 
         except Exception as e:
             # Specific errors logged in fetch/save methods. This catches the failure.
-            logger.error(f"--- Lloguer Run Failed. See previous logs for error details. ---", exc_info=False) # Avoid duplicate traceback if already logged
+            logger.error(f"--- Lloguer Run Failed. See previous logs for error details. ---", exc_info=False)
             raise # Re-raise the exception to signal failure to the caller
+
+if __name__ == "__main__":
+    lloguer = Lloguer()
+    try:
+        lloguer.run(verbose=True) # Set verbose to True for inspection
+    except Exception as e:
+        logger.error(f"Error in Lloguer run: {e}", exc_info=True)
+    finally:
+        logger.info("Lloguer process completed.")
