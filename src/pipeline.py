@@ -11,7 +11,7 @@ class Pipeline:
 	"""
 	def __init__(self, spark: SparkSession):
 		self.spark = spark
-		self.landing = LandingZone(spark=self.spark)
+		self.landing = LandingZone() # No spark is used in landing zone
 		self.formatted = FormattedZone(spark=self.spark)
 		self.trusted = TrustedZone(spark=self.spark)
 		self.exploitation = ExploitationZone(spark=self.spark)
