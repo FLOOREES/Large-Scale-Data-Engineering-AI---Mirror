@@ -3,7 +3,7 @@ import pandas as pd
 import time
 import logging
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import pyarrow # Ensure pyarrow is available
 
 # --- Configuration ---
