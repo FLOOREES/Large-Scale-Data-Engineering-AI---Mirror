@@ -34,8 +34,8 @@ class LloguerTrustedZone:
             output_path: Path for the output Delta Lake table (e.g., './data/trusted/lloguer_catalunya').
         """
         self.spark = spark
-        self.input_path = str(input_path) if input_path else "./data/formatted/lloguer_catalunya"
-        self.output_path = str(output_path) if output_path else "./data/trusted/lloguer_catalunya"
+        self.input_path = str(input_path) if input_path else "./data/formatted/lloguer"
+        self.output_path = str(output_path) if output_path else "./data/trusted/lloguer"
         # Schema is expected to be the same as the formatted output
         print(f"Lloguer Trusted Zone Initialized.")
         print(f"  Input Formatted Path: {self.input_path}")
@@ -224,8 +224,8 @@ def get_spark_session() -> SparkSession:
 # --- Main Execution Block (Identical) ---
 if __name__ == "__main__":
     # ... (main block is identical, no changes needed)
-    INPUT_DELTA_FORMATTED = "./data/formatted/lloguer_catalunya"
-    OUTPUT_DELTA_TRUSTED = "./data/trusted/lloguer_catalunya"
+    INPUT_DELTA_FORMATTED = "./data/formatted/lloguer"
+    OUTPUT_DELTA_TRUSTED = "./data/trusted/lloguer"
     Path(OUTPUT_DELTA_TRUSTED).parent.mkdir(parents=True, exist_ok=True)
     spark = None
     try:
