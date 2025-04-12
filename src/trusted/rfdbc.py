@@ -17,7 +17,6 @@ class RFDBCTrustedZone:
         self.spark = spark
         self.input_path = input_path
         self.output_path = output_path
-        self.initial_df = self._load_data()
         print(f"RFDBCTrustedZone Initialized. Input: {input_path}, Output: {output_path}")
 
     def _load_data(self) -> DataFrame:
@@ -168,9 +167,7 @@ class RFDBCTrustedZone:
     def run(self):
         """Executes the full Trusted Zone processing pipeline."""
         print(f"\n--- Running RFDBC Trusted Zone Processing ---")
-        if self.initial_df is None:
-            print("ERROR: Initial DataFrame not loaded. Aborting.")
-            return
+        self.initial_df = self._load_data()
 
         try:
             # Step 1: Remove Columns

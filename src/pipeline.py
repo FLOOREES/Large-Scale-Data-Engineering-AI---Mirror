@@ -19,10 +19,14 @@ class Pipeline:
 		self.exploitation = ExploitationZone(spark=self.spark)
 
 	def run(self):
+		print("\n\nPIPELINE: STARTING LANDING ZONE\n\n")
 		self.landing.run()
 		if self.max_stage >= 2:
+			print("\n\nPIPELINE: STARTING FORMATTED ZONE\n\n")
 			self.formatted.run()
 		if self.max_stage >= 3:
+			print("\n\nPIPELINE: STARTING TRUSTED ZONE\n\n")
 			self.trusted.run()
 		if self.max_stage >= 4:
+			print("\n\nPIPELINE: STARTING EXPLOITATION ZONE\n\n")
 			self.exploitation.run()

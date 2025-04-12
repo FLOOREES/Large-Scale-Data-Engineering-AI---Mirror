@@ -20,7 +20,6 @@ class RFDBCFormattedZone:
     def __init__(self, spark: SparkSession, output_path: str = "./data/formatted/rfdbc", input_data_path: str = "./data/landing/rfdbc.json"):
         self.spark = spark
         self.input_data_path = input_data_path
-        self.input_data = self._load_input_data()
         self.output_path = output_path
         # Define the mapping from original generated names to desired final names
         self.column_mapping = self._get_column_mapping()
@@ -30,7 +29,6 @@ class RFDBCFormattedZone:
         self.target_schema = self._define_target_schema()
         print(f"RFDBC Formatted Zone Initialized. Output Delta Path: {self.output_path}")
         print(f"Column Renaming Map: {self.column_mapping}")
-
 
     def _load_input_data(self) -> Dict[str, Any]:
         """Loads the input data from a JSON file."""
@@ -215,6 +213,8 @@ class RFDBCFormattedZone:
     def run(self):
         """Executes the Formatted Zone processing for the RFDBC data."""
         print(f"--- Running RFDBC Formatted Zone Task ---")
+        self.input_data = self._load_input_data()
+        
         try:
             # 1. Transform the input Python dictionary data
             print("Transforming raw data dictionary into records...")
