@@ -1,5 +1,7 @@
+import sys
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
+from pyspark.sql.types import DoubleType, IntegerType # Import IntegerType for casting
 
 # --- Delta Lake Package Configuration ---
 DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Or your desired Delta version
@@ -12,7 +14,7 @@ class RFDBCTrustedZone:
     Processing steps separated into methods:
     - remove_columns: Removes specific columns.
     - modify_columns: Renames columns and applies modifications (e.g., municipality code).
-    - remove_rows: Handles duplicates and missing value strategies.
+    - remove_rows: Removes duplicates and enforces denial constraints (data quality rules).
     """
 
     def __init__(self, spark: SparkSession, input_path: str, output_path: str):
@@ -39,17 +41,13 @@ class RFDBCTrustedZone:
         """Removes specified columns."""
         print("\n--- Step: Removing Columns ---")
         cols_to_drop = ["concept_code", "concept_label", "year_code"]
-
-        # Check if columns exist before attempting to drop
         actual_cols_to_drop = [col for col in cols_to_drop if col in df.columns]
         if len(actual_cols_to_drop) < len(cols_to_drop):
             missing = set(cols_to_drop) - set(actual_cols_to_drop)
             print(f"Warning: Columns to drop not found: {missing}")
-
         if not actual_cols_to_drop:
              print("No columns to drop found or specified.")
-             return df # Return original df if nothing to drop
-
+             return df
         df_dropped = df.drop(*actual_cols_to_drop)
         print(f"Columns dropped: {actual_cols_to_drop}")
         print("Schema after column removal:")
@@ -61,49 +59,41 @@ class RFDBCTrustedZone:
         print("\n--- Step: Modifying Columns (Rename & Adjustments) ---")
         df_modified = df
 
-        # --- 1. Rename Columns ---
+        # Rename 'year_label' to 'year'
         col_to_rename = "year_label"
         new_name = "year"
-
         if col_to_rename in df_modified.columns:
             df_modified = df_modified.withColumnRenamed(col_to_rename, new_name)
             print(f"Renamed column '{col_to_rename}' to '{new_name}'.")
         else:
             print(f"Warning: Column to rename '{col_to_rename}' not found.")
 
-        # --- 2. Modify Municipality Code/ID ---
-        # Assuming the column name is 'municipality_id' from the previous steps
+        # Modify 'municipality_id' - remove last digit
         mun_col = "municipality_id"
         if mun_col in df_modified.columns:
             print(f"Modifying column '{mun_col}': Removing last digit.")
-            # Use substring: start at position 1, length is original length - 1
-            # Ensure the column is treated as string for length check
+            # Ensure cast to string for length calculation
             df_modified = df_modified.withColumn(
                 mun_col,
-                F.expr(f"substring({mun_col}, 1, length(cast({mun_col} as string)) - 1)")
+                F.expr(f"substring(cast({mun_col} as string), 1, length(cast({mun_col} as string)) - 1)")
             )
-            # Optional: You might want to cast back to original type if needed,
-            # but removing a digit likely keeps it as a string effectively.
             print(f"Applied modification to '{mun_col}'.")
         else:
             print(f"Warning: Column '{mun_col}' not found for modification.")
 
         print("Schema after column modifications:")
         df_modified.printSchema()
-        # Optional: Show sample data to verify modification
-        # print("Sample data after modification:")
-        # df_modified.select(mun_col).distinct().show(5)
         return df_modified
 
     def remove_rows(self, df: DataFrame) -> DataFrame:
         """
-        Removes duplicate rows and handles missing values according to the defined strategy.
-        (Logic remains the same as the previous version)
+        Removes duplicate rows and filters data based on denial constraints.
         1. Removes exact duplicates.
-        2. Finds municipalities associated with any missing data and removes all their rows.
-        3. Removes any remaining rows with missing data.
+        2. Filters based on year range [2000, 2025].
+        3. Filters based on modified municipality_id length (must be 5).
+        4. Filters based on value being positive (> 0).
         """
-        print("\n--- Step: Removing Rows (Duplicates & Missing Value Strategy) ---")
+        print("\n--- Step: Removing Rows (Duplicates & Denial Constraints) ---")
 
         # --- 1. Remove Exact Duplicates ---
         initial_count = df.count()
@@ -112,73 +102,72 @@ class RFDBCTrustedZone:
         deduplicated_count = df_deduplicated.count()
         duplicates_removed = initial_count - deduplicated_count
         if duplicates_removed > 0:
-            print(f"Removed {duplicates_removed} duplicate rows.")
+            print(f"- Removed {duplicates_removed} duplicate rows.")
         else:
-            print("No duplicate rows found.")
-        print(f"Rows after deduplication: {deduplicated_count}")
+            print("- No duplicate rows found.")
+        print(f"  Rows remaining: {deduplicated_count}")
 
-        # Cache potentially for missing value checks
+        # Cache after deduplication as multiple filters will be applied
         df_deduplicated.cache()
+        current_df = df_deduplicated
+        rows_before_constraints = deduplicated_count
 
-        # --- 2. Identify and Remove Rows for Municipalities with Missing Data ---
-        print("\nIdentifying municipalities associated with missing data...")
-        municipality_id_col = "municipality_id" # This should match the name *after* modification step
-
-        if municipality_id_col not in df_deduplicated.columns:
-            print(f"Warning: Column '{municipality_id_col}' not found. Skipping municipality-based removal.")
-            df_filtered_mun = df_deduplicated # Proceed without this step
+        # --- 2. Apply Denial Constraint: Year Range [2000, 2025] ---
+        year_col = "year"
+        if year_col in current_df.columns:
+            print(f"\nApplying constraint: '{year_col}' between 2000 and 2025 (inclusive).")
+            # Ensure year is treated as integer for comparison
+            year_condition = (F.col(year_col).cast(IntegerType()) >= 2000) & \
+                             (F.col(year_col).cast(IntegerType()) <= 2025)
+            df_filtered = current_df.filter(year_condition)
+            count_after_filter = df_filtered.count()
+            rows_removed = rows_before_constraints - count_after_filter
+            print(f"- Removed {rows_removed} rows violating year constraint.")
+            print(f"  Rows remaining: {count_after_filter}")
+            current_df = df_filtered
+            rows_before_constraints = count_after_filter
         else:
-            # Build filter expression for rows with *any* missing value
-            missing_filter_expr = None
-            for c in df_deduplicated.columns:
-                col_check = F.col(c).isNull()
-                if dict(df_deduplicated.dtypes)[c] in ('double', 'float'):
-                     col_check = col_check | F.isnan(F.col(c))
-                if missing_filter_expr is None:
-                    missing_filter_expr = col_check
-                else:
-                    missing_filter_expr = missing_filter_expr | col_check
+             print(f"Warning: Column '{year_col}' not found. Skipping year constraint.")
 
-            missing_rows_df = df_deduplicated.filter(missing_filter_expr)
-            missing_rows_count = missing_rows_df.count()
-
-            if missing_rows_count > 0:
-                print(f"Found {missing_rows_count} rows containing at least one missing value.")
-                # Get distinct municipality IDs from these rows
-                # Note: these IDs will be the *modified* ones (last digit removed)
-                mun_ids_with_missing = missing_rows_df.select(municipality_id_col).distinct()
-                mun_ids_list = [row[municipality_id_col] for row in mun_ids_with_missing.collect()]
-
-                if mun_ids_list:
-                    print(f"Identified {len(mun_ids_list)} modified municipality IDs associated with missing data: {mun_ids_list}")
-                    print(f"Removing ALL rows for these modified IDs...")
-                    # Filter out rows where the *modified* municipality_id is in the collected list
-                    df_filtered_mun = df_deduplicated.filter(~F.col(municipality_id_col).isin(mun_ids_list))
-                    filtered_mun_count = df_filtered_mun.count()
-                    mun_rows_removed = deduplicated_count - filtered_mun_count
-                    print(f"Removed {mun_rows_removed} rows belonging to identified modified IDs.")
-                    print(f"Rows after municipality-based removal: {filtered_mun_count}")
-                else:
-                    print("No specific municipality IDs found associated with the missing rows.")
-                    df_filtered_mun = df_deduplicated
-            else:
-                print("No rows with missing values found. Skipping municipality-based removal.")
-                df_filtered_mun = df_deduplicated
-
-        # --- 3. Remove Any Other Rows with Missing Values ---
-        print("\nRemoving any remaining rows with missing values...")
-        count_before_final_na_drop = df_filtered_mun.count()
-        df_cleaned = df_filtered_mun.dropna(how='any')
-        final_count = df_cleaned.count()
-        final_na_removed = count_before_final_na_drop - final_count
-        if final_na_removed > 0:
-             print(f"Removed {final_na_removed} additional rows containing missing values.")
+        # --- 3. Apply Denial Constraint: Municipality ID Length == 5 ---
+        mun_col = "municipality_id" # This is the modified ID
+        if mun_col in current_df.columns:
+            print(f"\nApplying constraint: length of '{mun_col}' must be 5.")
+            # Length function works on strings
+            mun_len_condition = F.length(F.col(mun_col)) == 5
+            df_filtered = current_df.filter(mun_len_condition)
+            count_after_filter = df_filtered.count()
+            rows_removed = rows_before_constraints - count_after_filter
+            print(f"- Removed {rows_removed} rows violating municipality ID length constraint.")
+            print(f"  Rows remaining: {count_after_filter}")
+            current_df = df_filtered
+            rows_before_constraints = count_after_filter
         else:
-             print("No further rows with missing values found to remove.")
+             print(f"Warning: Column '{mun_col}' not found. Skipping municipality ID length constraint.")
 
-        print(f"Final row count after all cleaning: {final_count}")
+        # --- 4. Apply Denial Constraint: Value > 0 ---
+        value_col = "value"
+        if value_col in current_df.columns:
+             print(f"\nApplying constraint: '{value_col}' must be positive (> 0).")
+             # Direct comparison works for numeric types. Nulls will be filtered out.
+             value_condition = F.col(value_col) > 0
+             df_filtered = current_df.filter(value_condition)
+             count_after_filter = df_filtered.count()
+             rows_removed = rows_before_constraints - count_after_filter
+             print(f"- Removed {rows_removed} rows violating positive value constraint.")
+             print(f"  Rows remaining: {count_after_filter}")
+             current_df = df_filtered
+             rows_before_constraints = count_after_filter
+        else:
+             print(f"Warning: Column '{value_col}' not found. Skipping positive value constraint.")
+
+
+        print(f"\nFinal row count after all constraints: {rows_before_constraints}")
+
+        # Unpersist the cached DataFrame
         df_deduplicated.unpersist()
-        return df_cleaned
+
+        return current_df # Return the final filtered DataFrame
 
     def run(self):
         """Executes the full Trusted Zone processing pipeline."""
@@ -194,16 +183,20 @@ class RFDBCTrustedZone:
             # Step 2: Modify Columns (Rename, Adjustments)
             df_cols_modified = self.modify_columns(df_cols_removed)
 
-            # Step 3: Remove Rows (Duplicates & Missing Handling)
+            # Step 3: Remove Rows (Duplicates & Denial Constraints)
             df_cleaned = self.remove_rows(df_cols_modified)
 
-            # Step 4: Final Inspection (Optional but recommended)
+            # Step 4: Final Inspection
             print("\n--- Final Inspection Before Save ---")
+            final_count = df_cleaned.count() # Recalculate count for final confirmation
             print("Final Schema:")
             df_cleaned.printSchema()
-            print(f"Final Row Count: {df_cleaned.count()}")
-            print("Sample of final data (first 10 rows):")
-            df_cleaned.show(10, truncate=False)
+            print(f"Final Row Count: {final_count}")
+            if final_count > 0:
+                print("Sample of final data (first 10 rows):")
+                df_cleaned.show(10, truncate=False)
+            else:
+                print("Final DataFrame is empty.")
 
             # Step 5: Save to Trusted Zone Delta Lake
             print(f"\nSaving cleaned data to Delta table: {self.output_path}")
@@ -244,8 +237,8 @@ def get_spark_session() -> SparkSession:
 # --- Main Execution Block ---
 if __name__ == "__main__":
     # Define paths
-    INPUT_DELTA_PATH = "./data/formatted/rfdbc_data" # Assumes output from RFDBCFormattedZone
-    OUTPUT_DELTA_PATH = "./data/trusted/rfdbc_data" # Use different path to avoid conflicts
+    INPUT_DELTA_PATH = "./data/formatted/rfdbc_data"
+    OUTPUT_DELTA_PATH = "./data/trusted/rfdbc_data"
 
     spark = None
     try:
@@ -259,7 +252,7 @@ if __name__ == "__main__":
         )
         processor.run()
 
-        # --- Optional: Verification Step ---
+        # --- Verification Step ---
         print("\n--- Verifying Output Delta Table Contents ---")
         try:
             df_read = spark.read.format("delta").load(OUTPUT_DELTA_PATH)
@@ -268,6 +261,8 @@ if __name__ == "__main__":
             df_read.printSchema()
             print("Final Data:")
             df_read.show(truncate=False)
+            # EXPECTED OUTPUT: Only the first 3 rows from dummy_data_constraints should remain
+            # (after removing the duplicate of the first row).
         except Exception as read_e:
             print(f"Warning: Error reading back final Delta table: {read_e}")
         # ------------------------------------
