@@ -1,9 +1,9 @@
 from pyspark.sql import SparkSession
 
-from src.landing.landing import LandingZone
-from src.formatted.formatted import FormattedZone
-from src.trusted.trusted import TrustedZone
-from src.exploitation.exploitation import ExploitationZone
+from landing.landing import LandingZone
+from formatted.formatted import FormattedZone
+from trusted.trusted import TrustedZone
+from exploitation.exploitation import ExploitationZone
 
 class Pipeline:
 	"""

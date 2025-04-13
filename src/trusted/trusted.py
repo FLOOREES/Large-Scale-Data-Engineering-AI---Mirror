@@ -1,8 +1,8 @@
 from pyspark.sql import SparkSession
 
-from src.trusted.idescat import IdescatTrustedZone
-from src.trusted.lloguer import LloguerTrustedZone
-from src.trusted.rfdbc import RFDBCTrustedZone
+from trusted.idescat import IdescatTrustedZone
+from trusted.lloguer import LloguerTrustedZone
+from trusted.rfdbc import RFDBCTrustedZone
 
 class TrustedZone:
 	def __init__(self, spark: SparkSession):

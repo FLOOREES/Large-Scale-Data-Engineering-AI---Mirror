@@ -1,8 +1,8 @@
 from pyspark.sql import SparkSession
 
-from src.formatted.idescat import IdescatFormattedZone
-from src.formatted.lloguer import LloguerFormattedZone
-from src.formatted.rfdbc import RFDBCFormattedZone
+from formatted.idescat import IdescatFormattedZone
+from formatted.lloguer import LloguerFormattedZone
+from formatted.rfdbc import RFDBCFormattedZone
 
 class FormattedZone:
 	def __init__(self, spark: SparkSession):

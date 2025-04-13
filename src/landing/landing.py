@@ -1,6 +1,6 @@
-from src.landing.idescat import IdescatLandingZone
-from src.landing.lloguer import LloguerLandingZone
-from src.landing.rfdbc import RFDBCLandingZone
+from landing.idescat import IdescatLandingZone
+from landing.lloguer import LloguerLandingZone
+from landing.rfdbc import RFDBCLandingZone
 
 class LandingZone:
 	def __init__(self):

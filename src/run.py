@@ -1,7 +1,7 @@
-from src.spark_session import get_spark_session
-from src.setup import make_folder_structure
+from spark_session import get_spark_session
+from setup import make_folder_structure
 
-from src.pipeline import Pipeline
+from pipeline import Pipeline
 
 if __name__ == "__main__":
 	make_folder_structure()
