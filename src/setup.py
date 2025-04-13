@@ -3,15 +3,16 @@ import os
 def make_folder_structure():
     """
     Create a folder structure for the project.
-
-    Args:
-        base_path (str): The base path where the folder structure will be created.
     """
     folders = [
         "data/landing",
         "data/formatted",
         "data/trusted",
-        "data/exploitation"
+        "data/exploitation",
+        "data/analysis/maps",
+        "data/analysis/plots",
+        "results",
+        
     ]
 
     for folder in folders:

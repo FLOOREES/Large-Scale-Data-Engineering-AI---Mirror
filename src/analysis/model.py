@@ -20,7 +20,7 @@ import lightgbm as lgb #type: ignore
 # --- Visualization ---
 import matplotlib.pyplot as plt #type: ignore
 
-class DataAnalysisPipeline:
+class Model:
     """
     A pipeline to perform data analysis and train a LightGBM model
     to predict average monthly rent using the consolidated exploitation data.
@@ -470,7 +470,7 @@ if __name__ == "__main__":
     spark = None
     try:
         spark = get_spark_session()
-        pipeline = DataAnalysisPipeline(spark=spark)
+        pipeline = Model(spark=spark)
         pipeline.run()
 
     except Exception as main_error:
