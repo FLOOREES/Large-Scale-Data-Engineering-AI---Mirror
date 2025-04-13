@@ -16,7 +16,7 @@ from pyspark.sql import functions as F
 # --- Configuration ---
 
 # 1. Path to Exploitation Zone Delta table
-EXPLOITATION_DATA_PATH = "./data/exploitation/consolidated_municipal_annual"
+EXPLOITATION_DATA_PATH = "./data/exploitation"
 
 # 2. Path to downloaded Shapefile (specifically the .shp file)
 SHAPEFILE_PATH = Path("./geospatial/MUC_TM.shp")
@@ -38,33 +38,7 @@ MISSING_DATA_LABEL = 'Missing Data'
 
 # 7. Output directory for the map image
 OUTPUT_DIR = Path("./data/analysis_output/maps")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# 8. Delta Lake Package Configuration (for SparkSession)
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Use version compatible with Spark 3.3
-
-# --- Spark Session Creation Helper ---
-def get_spark_session() -> SparkSession:
-    """Initializes and returns a SparkSession configured for Delta Lake."""
-    print("Initializing Spark Session...")
-    try:
-        spark = SparkSession.builder \
-            .appName("AffordabilityMapMultiYear") \
-            .master("local[*]") \
-            .config("spark.jars.packages", DELTA_PACKAGE) \
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.sql.parquet.int96AsTimestamp", "true") \
-            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-            .getOrCreate()
-        # Set log level after creation
-        spark.sparkContext.setLogLevel("ERROR")
-        print("Spark Session Initialized. Log level set to ERROR.")
-        return spark
-    except Exception as e:
-        print(f"FATAL: Error initializing Spark Session: {e}")
-        raise
 
 # --- Data Processing and Plotting ---
 
@@ -203,6 +177,7 @@ def plot_affordability_map_continuous(year: int, stats_data_for_year: pd.DataFra
 
 # --- Main Execution ---
 if __name__ == "__main__":
+    from src.spark_session import get_spark_session
 
     spark = None
     try:
