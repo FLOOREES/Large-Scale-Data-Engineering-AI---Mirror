@@ -189,59 +189,78 @@ class DataAnalysisPipeline:
         if self.data_pd is None or not self.features: return
         print("\n--- Step 4: Preprocessing Data ---")
 
-        # --- 4a. Split Data (Time-Based) ---
-        print("Splitting data into training and testing sets (time-based)...")
+        # --- 4a. Prepare Categorical Features BEFORE Split ---
+        print("Preparing categorical features for LightGBM (converting dtype)...")
+        self.categorical_features_in_X = [f for f in self.features if f in self.categorical_features and f in self.data_pd.columns]
+        if self.categorical_features_in_X:
+            print(f"Converting columns {self.categorical_features_in_X} to 'category' dtype in main DataFrame...")
+            for col in self.categorical_features_in_X:
+                # Convert in the main DataFrame before any splits
+                self.data_pd[col] = self.data_pd[col].astype('category')
+            print("Categorical dtypes set.")
+            print("dtypes after conversion:", self.data_pd[self.categorical_features_in_X].dtypes)
+        else:
+            print("No specified categorical features found in the feature list.")
+            self.categorical_features_in_X = [] # Ensure list is empty
+
+        # --- 4b. Split Data (Time-Based) ---
+        print("\nSplitting data into training and testing sets (time-based)...")
         test_year = self.data_pd[self.time_col].max()
         print(f"Test year determined as: {test_year}")
-
+        # Use .copy() to explicitly create copies
         train_df = self.data_pd[self.data_pd[self.time_col] < test_year].copy()
         test_df = self.data_pd[self.data_pd[self.time_col] == test_year].copy()
         if len(train_df) == 0 or len(test_df) == 0:
              raise ValueError(f"Train or test set is empty after splitting on year {test_year}.")
-
-        # *** Verification Print 1: Train/Test Year Ranges ***
+        # Verification Prints
         print(f"VERIFICATION: Training data year range: {train_df[self.time_col].min()} - {train_df[self.time_col].max()}")
         print(f"VERIFICATION: Test data year range: {test_df[self.time_col].min()} - {test_df[self.time_col].max()}")
-        # Check for overlap
         train_years = set(train_df[self.time_col].unique())
         test_years = set(test_df[self.time_col].unique())
         if train_years.intersection(test_years):
              print("!!! WARNING: Train and Test sets have overlapping years! Check split logic. !!!")
-        # *** End Verification Print 1 ***
-
+        # Assign features to X_train/X_test AFTER the split
         self.X_train = train_df[self.features]
         self.y_train = train_df[self.target_variable]
         self.X_test = test_df[self.features]
         self.y_test = test_df[self.target_variable]
         print(f"Data split: Train shape={self.X_train.shape}, Test shape={self.X_test.shape}")
 
-        # --- 4b. Missing Values ---
-        print("Skipping explicit missing value imputation.")
+        # --- 4c. Verify Test Set Categories (Optional but Recommended) ---
+        if self.categorical_features_in_X:
+            print("Verifying test set categories match training set...")
+            for col in self.categorical_features_in_X:
+                if col in self.X_train.columns and col in self.X_test.columns:
+                    train_cats = self.X_train[col].cat.categories
+                    test_cats = self.X_test[col].cat.categories
+                    if not train_cats.equals(test_cats):
+                        print(f"WARNING: Categories for '{col}' differ between train and test AFTER split.")
+                        # This *shouldn't* happen if split correctly, but good to check.
+                        # If it does, we might need to re-apply categories like before:
+                        # self.X_test.loc[:, col] = pd.Categorical(self.X_test[col], categories=train_cats)
+                else:
+                    print(f"Warning: Column '{col}' missing from train or test during category verification.")
+            print("Test set category check complete (no explicit re-application done here).")
 
-        # --- 4c. Categorical Features ---
-        print("Preparing categorical features for LightGBM...")
-        # ... (Keep identical) ...
-        categorical_features_in_X = [f for f in self.features if f in self.categorical_features]
-        if categorical_features_in_X:
-            print(f"Converting categorical columns {categorical_features_in_X} to pandas 'category' dtype...")
-            for col in categorical_features_in_X:
-                 self.X_train[col] = self.X_train[col].astype('category')
-                 self.X_test[col] = pd.Categorical(self.X_test[col], categories=self.X_train[col].cat.categories)
-            print("Categorical features prepared.")
-        else:
-            print("No specified categorical features found in the feature list.")
+
+        # --- 4d. Missing Values ---
+        print("\nSkipping explicit missing value imputation.")
 
 
-        # --- 4d. Scale Numeric Features ---
-        print("Scaling numeric features...")
-        # ... (Keep identical logic including .loc fix and scaler saving) ...
+        # --- 4e. Scale Numeric Features ---
+        print("\nScaling numeric features...")
         numeric_features_to_scale = self.X_train.select_dtypes(include=np.number).columns.tolist()
+        if self.time_col in numeric_features_to_scale:
+            print(f"NOTE: Temporarily removing '{self.time_col}' from scaling list.")
+            numeric_features_to_scale.remove(self.time_col)
+
         if not numeric_features_to_scale:
-             print("No numeric features found to scale.")
+             print("No numeric features found to scale (excluding year).")
         else:
             self.scaler = StandardScaler()
             print(f"Fitting scaler on training data (features: {numeric_features_to_scale})...")
             self.scaler.fit(self.X_train[numeric_features_to_scale])
+
             print("Transforming training and testing data...")
             X_train_scaled_np = self.scaler.transform(self.X_train[numeric_features_to_scale])
             X_test_scaled_np = self.scaler.transform(self.X_test[numeric_features_to_scale])
@@ -258,7 +277,10 @@ class DataAnalysisPipeline:
 
     # --- Model Training: ADDED Verification Prints ---
     def _train_model(self):
-        """Trains the LightGBM model with early stopping."""
+        """
+        Trains the LightGBM model with early stopping on a validation set,
+        then retrains on the full training set using the best iteration found.
+        """
         if self.X_train is None or self.y_train is None: return
         print("\n--- Step 5: Training LightGBM Model ---")
 
@@ -266,55 +288,82 @@ class DataAnalysisPipeline:
         val_year = self.X_train[self.time_col].max()
         train_final_idx = self.X_train[self.X_train[self.time_col] < val_year].index
         val_idx = self.X_train[self.X_train[self.time_col] == val_year].index
-        X_train_final = self.X_train.loc[train_final_idx]
-        y_train_final = self.y_train.loc[train_final_idx]
+
+        X_train_for_stopping = self.X_train.loc[train_final_idx]
+        y_train_for_stopping = self.y_train.loc[train_final_idx]
         X_val = self.X_train.loc[val_idx]
         y_val = self.y_train.loc[val_idx]
 
         callbacks = []
+        best_iteration = None # Initialize variable to store best iteration
         if len(X_val) == 0:
              print("Warning: No data for validation year. Training without early stopping.")
              eval_set = None
-             # *** Verification Print 2a: Training Year Range (No Validation) ***
-             print(f"VERIFICATION: Final training data year range: {X_train_final[self.time_col].min()} - {X_train_final[self.time_col].max()}")
+             # Train directly on full training data if no validation set
+             X_train_final = self.X_train
+             y_train_final = self.y_train
+             n_estimators_final = 2000 # Use original large number if no early stopping
         else:
-             val_actual_year = int(X_val[self.time_col].iloc[0])
-             print(f"Using year {val_actual_year} as validation set.")
-             print(f"Final training shape: {X_train_final.shape}, Validation shape: {X_val.shape}")
-             # *** Verification Print 2b: Train/Validation Year Ranges ***
-             print(f"VERIFICATION: Final training data year range: {X_train_final[self.time_col].min()} - {X_train_final[self.time_col].max()}")
-             print(f"VERIFICATION: Validation data year range: {X_val[self.time_col].min()} - {X_val[self.time_col].max()}")
-             # Check overlap
-             train_final_years = set(X_train_final[self.time_col].unique())
-             val_years = set(X_val[self.time_col].unique())
-             if train_final_years.intersection(val_years):
-                  print("!!! WARNING: Final Train and Validation sets have overlapping years! Check split logic. !!!")
-             # *** End Verification Print 2b ***
+             print(f"Using year {int(X_val[self.time_col].iloc[0])} as validation set for early stopping.")
+             print(f"Initial training shape: {X_train_for_stopping.shape}, Validation shape: {X_val.shape}")
              eval_set = [(X_val, y_val)]
              early_stopping_callback = lgb.early_stopping(stopping_rounds=50, verbose=True)
              callbacks.append(early_stopping_callback)
+             # Use the split data ONLY for finding the best iteration
+             X_train_final = X_train_for_stopping
+             y_train_final = y_train_for_stopping
+             n_estimators_final = 2000 # Start with high number for early stopping run
 
-        # --- LightGBM Parameters (Unchanged) ---
+        # --- LightGBM Parameters ---
         params = {
-            'objective': 'regression_l1', 'metric': ['mae', 'rmse'], 'n_estimators': 2000,
+            'objective': 'regression_l1', 'metric': ['mae', 'rmse'],
+            # 'n_estimators': n_estimators_final, # Set n_estimators dynamically later
             'learning_rate': 0.03, 'feature_fraction': 0.8, 'bagging_fraction': 0.8,
             'bagging_freq': 1, 'num_leaves': 41, 'max_depth': -1, 'lambda_l1': 0.1,
             'lambda_l2': 0.1, 'verbose': -1, 'n_jobs': -1, 'seed': 42, 'boosting_type': 'gbdt'
         }
-        print(f"Training LGBMRegressor with parameters: {params}")
-        self.model = lgb.LGBMRegressor(**params)
-        start_time = datetime.datetime.now()
-        categorical_features_in_X = [f for f in self.features if f in self.categorical_features]
-        self.model.fit(X_train_final, y_train_final, eval_set=eval_set,
-                       eval_metric=['mae', 'rmse'], callbacks=callbacks if eval_set else None,
-                       categorical_feature=categorical_features_in_X if categorical_features_in_X else 'auto')
-        end_time = datetime.datetime.now()
-        print(f"Model training complete in {end_time - start_time}.")
 
-        # --- Save Model ---
+        print(f"\nStep 5a: Finding best iteration using validation set (if available)...")
+        temp_model = lgb.LGBMRegressor(**params, n_estimators=n_estimators_final) # Use high n_estimators here
+
+        start_time_fit1 = datetime.datetime.now()
+        categorical_features_in_X = [f for f in self.features if f in self.categorical_features]
+        temp_model.fit(X_train_final, y_train_final, # Fit on training data up to val year
+                       eval_set=eval_set,
+                       eval_metric=['mae', 'rmse'],
+                       callbacks=callbacks if eval_set else None,
+                       categorical_feature=self.categorical_features_in_X if self.categorical_features_in_X else 'auto'
+                      )
+        end_time_fit1 = datetime.datetime.now()
+        print(f"Initial fit complete in {end_time_fit1 - start_time_fit1}.")
+
+        # Get the best iteration if early stopping was used
+        if eval_set and hasattr(temp_model, 'best_iteration_') and temp_model.best_iteration_ is not None:
+            best_iteration = temp_model.best_iteration_
+            print(f"Best iteration found via early stopping: {best_iteration}")
+            # Update n_estimators in params for the final model
+            params['n_estimators'] = best_iteration
+        else:
+            print("No early stopping performed or best iteration not found. Using original n_estimators.")
+            params['n_estimators'] = n_estimators_final # Use the original large number
+
+
+        # --- Step 5b: Retrain on FULL training data using best iteration ---
+        test_year = self.X_test[self.time_col].max()
+        print(f"\nStep 5b: Retraining final model on full training set (years < {test_year}) for {params['n_estimators']} iterations...")
+        # Use the FULL self.X_train and self.y_train here
+        self.model = lgb.LGBMRegressor(**params) # Create new model instance with optimal n_estimators
+        start_time_fit2 = datetime.datetime.now()
+        self.model.fit(self.X_train, self.y_train, # Fit on ALL training data
+                       categorical_feature=self.categorical_features_in_X if self.categorical_features_in_X else 'auto'
+                      )
+        end_time_fit2 = datetime.datetime.now()
+        print(f"Final model retraining complete in {end_time_fit2 - start_time_fit2}.")
+
+        # --- Save the FINAL retrained model ---
         model_path = self.model_dir / 'rent_predictor_lgbm.joblib'
         joblib.dump(self.model, model_path)
-        print(f"Trained model saved to {model_path}")
+        print(f"Final retrained model saved to {model_path}")
 
     # --- Evaluation: ADDED Verification Print ---
     def _evaluate_model(self):
@@ -450,7 +499,7 @@ def get_spark_session() -> SparkSession:
 # ... (Keep identical) ...
 if __name__ == "__main__":
     INPUT_EXPLOITATION_PATH = "./data/exploitation/consolidated_municipal_annual"
-    OUTPUT_ANALYSIS_DIR = "./data/analysis_outputs" # For plots/metrics
+    OUTPUT_ANALYSIS_DIR = "./results" # For plots/metrics
     OUTPUT_MODEL_DIR = "./models"                 # For model artifacts
     spark = None
     try:
