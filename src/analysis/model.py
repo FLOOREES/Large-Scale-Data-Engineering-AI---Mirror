@@ -121,7 +121,6 @@ class DataAnalysisPipeline:
         """Creates new features: lags, differences, rolling means."""
         if self.data_pd is None: return
         print("\n--- Step 3: Feature Engineering ---")
-        # ... (Keep identical) ...
         print("Sorting data by municipality and year...")
         self.data_pd = self.data_pd.sort_values(by=[*self.id_cols, self.time_col]).reset_index(drop=True)
         print("Creating time-based features (lags, diffs, rolling)...")
@@ -129,34 +128,59 @@ class DataAnalysisPipeline:
         salary = "salary_per_capita_eur"
         contracts = "total_annual_contracts"
         engineered_features = []
+
+        # Lags (Keep as before)
         for col in [target, salary, contracts]:
             if col in self.data_pd.columns:
                 for lag in [1, 2]:
                     lag_col_name = f"{col}_lag{lag}"
                     self.data_pd[lag_col_name] = self.data_pd.groupby(self.id_cols)[col].shift(lag)
                     engineered_features.append(lag_col_name)
-        if f"{target}_lag1" in self.data_pd.columns:
-             diff_col_name = f"{target}_diff1"
-             self.data_pd[diff_col_name] = self.data_pd[target] - self.data_pd[f"{target}_lag1"]
+
+        # Differences (CORRECTED: Use lag1 - lag2)
+        lag1_target_col = f"{target}_lag1"
+        lag2_target_col = f"{target}_lag2"
+        if lag1_target_col in self.data_pd.columns and lag2_target_col in self.data_pd.columns:
+             diff_col_name = f"{target}_diff1" # Name still represents 1-period difference
+             # Calculate difference between T-1 and T-2
+             self.data_pd[diff_col_name] = self.data_pd[lag1_target_col] - self.data_pd[lag2_target_col]
              engineered_features.append(diff_col_name)
-        if f"{target}_lag1" in self.data_pd.columns:
+             print(f"Created corrected difference feature: {diff_col_name} (lag1 - lag2)")
+        else:
+             print(f"Skipping difference feature creation as lag1 or lag2 target column is missing.")
+
+
+        # Rolling Means (Keep as before - based on lag1)
+        if lag1_target_col in self.data_pd.columns:
             roll_col_name = f"{target}_roll_mean3"
-            self.data_pd[roll_col_name] = self.data_pd.groupby(self.id_cols)[f"{target}_lag1"] \
+            self.data_pd[roll_col_name] = self.data_pd.groupby(self.id_cols)[lag1_target_col] \
                                               .rolling(window=3, min_periods=1).mean().reset_index(level=self.id_cols, drop=True)
             engineered_features.append(roll_col_name)
+
+        # --- Define final feature list ---
         self.features = self.numeric_features_base + [self.time_col] + engineered_features + self.categorical_features
-        self.features = [f for f in self.features if f in self.data_pd.columns]
+        self.features = [f for f in self.features if f in self.data_pd.columns] # Ensure only existing columns are included
         print(f"Engineered features created. Final candidate features ({len(self.features)}): {self.features}")
-        essential_cols_for_dropna = [self.target_variable, f"{target}_lag1"]
+
+        # --- Handle NaNs introduced by essential lags/target ---
+        essential_cols_for_dropna = [self.target_variable, lag1_target_col] # Still drop if target or lag1 is missing
         print(f"Dropping rows only if NaNs exist in essential columns: {essential_cols_for_dropna}")
         initial_rows = len(self.data_pd)
+        # Also drop rows where the corrected diff1 could not be calculated (because lag2 was missing)
+        # If diff_col_name was created, add it to the drop subset
+        if 'diff_col_name' in locals() and diff_col_name in self.data_pd.columns:
+             essential_cols_for_dropna.append(diff_col_name)
+             print(f"Also dropping rows if corrected '{diff_col_name}' is NaN.")
+
         self.data_pd = self.data_pd.dropna(subset=essential_cols_for_dropna).reset_index(drop=True)
         rows_after_drop = len(self.data_pd)
         print(f"Dropped {initial_rows - rows_after_drop} rows based on NaNs in essential columns.")
         print(f"DataFrame shape after essential drop: {self.data_pd.shape}")
+
         print("\nMissing values REMAINING in candidate features (to be handled by LightGBM):")
         remaining_missing = self.data_pd[self.features].isnull().sum()
         print(remaining_missing[remaining_missing > 0].to_string())
+
         print("Feature Engineering complete.")
 
     # --- Preprocessing: ADDED Verification Prints ---
