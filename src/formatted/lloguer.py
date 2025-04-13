@@ -144,7 +144,7 @@ class LloguerFormattedZone:
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    from src.spark_session import get_spark_session
+    from spark_session import get_spark_session
 
     spark = None
     try:

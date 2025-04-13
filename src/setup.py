@@ -8,7 +8,7 @@ def make_folder_structure():
         "data/landing",
         "data/formatted",
         "data/trusted",
-        "data/exploitation",
+        "data/exploitation/municipal_annual",
         "data/analysis/visualizer",
         "data/analysis/model",
     ]

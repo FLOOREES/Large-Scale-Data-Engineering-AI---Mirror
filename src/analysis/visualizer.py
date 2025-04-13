@@ -37,7 +37,7 @@ class CatalanAffordabilityVisualizer:
     MISSING_DATA_LABEL = 'Missing Data'
     # --------------------------------------------------------------
 
-    def __init__(self, spark: SparkSession, exploitation_data_path: str = "./data/exploitation", shapefile_path: str = "./geospatial/MUC_TM.shp", output_dir: str = "./data/analysis/visualizer"):
+    def __init__(self, spark: SparkSession, exploitation_data_path: str = "./data/exploitation/municipal_annual", shapefile_path: str = "./geospatial/MUC_TM.shp", output_dir: str = "./data/analysis/visualizer"):
         """
         Initializes the visualizer with paths and optional custom configuration.
 

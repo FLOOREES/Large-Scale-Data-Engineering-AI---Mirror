@@ -196,7 +196,7 @@ class LloguerTrustedZone:
 if __name__ == "__main__":
     spark = None
     try:
-        from src.spark_session import get_spark_session
+        from spark_session import get_spark_session
 
         spark = get_spark_session()
         truster = LloguerTrustedZone(spark=spark)

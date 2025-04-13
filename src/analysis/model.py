@@ -28,7 +28,7 @@ class Model:
     """
 
     def __init__(self, spark: SparkSession,
-                 input_path: str = "./data/exploitation",
+                 input_path: str = "./data/exploitation/municipal_annual",
                  output_dir: str = "./data/analysis/model", # For plots/metrics
                  model_dir: str = "./models", # For model artifacts
                  target_variable: str = "avg_monthly_rent_eur"):
@@ -466,7 +466,7 @@ class Model:
 
 # --- Main Execution Block (Unchanged) ---
 if __name__ == "__main__":
-    from src.spark_session import get_spark_session
+    from spark_session import get_spark_session
     spark = None
     try:
         spark = get_spark_session()
