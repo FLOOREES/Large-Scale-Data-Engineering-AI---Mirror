@@ -1,7 +1,7 @@
 # data_analysis_pipeline.py
 
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List
 import traceback
 import datetime
 import joblib #type: ignore
@@ -10,22 +10,15 @@ import joblib #type: ignore
 import pandas as pd
 import numpy as np
 
-# --- PySpark Imports ---
-from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql import functions as F
+from pyspark.sql import SparkSession
 
 # --- ML Imports ---
-from sklearn.model_selection import train_test_split #type: ignore
 from sklearn.preprocessing import StandardScaler    #type: ignore
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error #type: ignore
 import lightgbm as lgb #type: ignore
 
 # --- Visualization ---
 import matplotlib.pyplot as plt #type: ignore
-import seaborn as sns #type: ignore
-
-# --- Delta Lake Package Configuration ---
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0"
 
 class DataAnalysisPipeline:
     """
@@ -35,7 +28,7 @@ class DataAnalysisPipeline:
     """
 
     def __init__(self, spark: SparkSession,
-                 input_path: str = "./data/exploitation/consolidated_municipal_annual",
+                 input_path: str = "./data/exploitation",
                  output_dir: str = "./data/analysis_outputs", # For plots/metrics
                  model_dir: str = "./models", # For model artifacts
                  target_variable: str = "avg_monthly_rent_eur"):
@@ -471,49 +464,15 @@ class DataAnalysisPipeline:
             traceback.print_exc()
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
-# --- Spark Session Creation Helper (Unchanged) ---
-# ... (Keep identical) ...
-def get_spark_session() -> SparkSession:
-    """Initializes and returns a SparkSession configured for Delta Lake."""
-    print("Initializing Spark Session...")
-    try:
-        spark = SparkSession.builder \
-            .appName("DataAnalysisPipeline") \
-            .master("local[*]") \
-            .config("spark.jars.packages", DELTA_PACKAGE) \
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.driver.memory", "4g") \
-            .config("spark.sql.parquet.int96AsTimestamp", "true") \
-            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
-            .getOrCreate()
-        spark.sparkContext.setLogLevel("ERROR")
-        print("Spark Session Initialized. Log level set to ERROR.")
-        return spark
-    except Exception as e:
-        print(f"FATAL: Error initializing Spark Session: {e}")
-        raise
-
 # --- Main Execution Block (Unchanged) ---
-# ... (Keep identical) ...
 if __name__ == "__main__":
-    INPUT_EXPLOITATION_PATH = "./data/exploitation/consolidated_municipal_annual"
-    OUTPUT_ANALYSIS_DIR = "./results" # For plots/metrics
-    OUTPUT_MODEL_DIR = "./models"                 # For model artifacts
+    from src.spark_session import get_spark_session
     spark = None
     try:
         spark = get_spark_session()
-        exploit_log_path = Path(INPUT_EXPLOITATION_PATH) / "_delta_log"
-        if not exploit_log_path.is_dir():
-            print(f"ERROR: Input Exploitation Delta table log not found at {exploit_log_path}")
-            print("Please ensure the Exploitation Zone script ran successfully.")
-        else:
-            pipeline = DataAnalysisPipeline(spark=spark,
-                                            input_path=INPUT_EXPLOITATION_PATH,
-                                            output_dir=OUTPUT_ANALYSIS_DIR,
-                                            model_dir=OUTPUT_MODEL_DIR)
-            pipeline.run()
+        pipeline = DataAnalysisPipeline(spark=spark)
+        pipeline.run()
+
     except Exception as main_error:
         print(f"\nAn unexpected error occurred in the main execution block: {main_error}")
         traceback.print_exc()
