@@ -15,10 +15,10 @@ from pyspark.sql import functions as F
 
 # --- Configuration ---
 
-# 1. Path to your Exploitation Zone Delta table
+# 1. Path to Exploitation Zone Delta table
 EXPLOITATION_DATA_PATH = "./data/exploitation/consolidated_municipal_annual"
 
-# 2. Path to your downloaded Shapefile (specifically the .shp file)
+# 2. Path to downloaded Shapefile (specifically the .shp file)
 SHAPEFILE_PATH = Path("./geospatial/MUC_TM.shp")
 
 # 3. Column name in Shapefile containing the 5-digit municipality code
