@@ -42,10 +42,10 @@ class LloguerFormattedZone:
             StructField("ambit_territorial", StringType(), True),
             StructField("codi_territorial", StringType(), True),
             StructField("nom_territori", StringType(), True),
-            StructField("any", IntegerType(), True),           # Target: Integer
+            StructField("any", IntegerType(), True),
             StructField("periode", StringType(), True),
-            StructField("habitatges", IntegerType(), True),      # Target: Integer (assuming this is count)
-            StructField("renda", DoubleType(), True),          # Target: Double (average rent, allows nulls)
+            StructField("habitatges", IntegerType(), True),
+            StructField("renda", DoubleType(), True),
             StructField("tram_preus", StringType(), True)
         ])
 
@@ -54,7 +54,7 @@ class LloguerFormattedZone:
         print(f"--- Inspecting Output Delta Table: {self.output_path} ---")
         try:
             # Check if the Delta path exists before attempting to read
-            # Note: For Delta, checking for _delta_log directory is more reliable than the base path
+            # For Delta, checking for _delta_log directory is more reliable than the base path
             delta_log_path = Path(self.output_path) / "_delta_log"
             if not delta_log_path.is_dir():
                  print(f"Inspection failed: Delta log not found at {delta_log_path}. Table might not exist or is corrupted.")
@@ -70,10 +70,6 @@ class LloguerFormattedZone:
             print(f"\nSample Data (First 5 rows) from Delta Table:")
             # Use truncate=False to see full column content
             df_read_back.show(5, truncate=False)
-
-            # Optional: Add more checks here, e.g., count nulls in key columns
-            # print("\nNull counts per column:")
-            # df_read_back.select([F.count(F.when(F.isnull(c), c)).alias(c) for c in df_read_back.columns]).show()
 
         except Exception as e:
              print(f"!!! Inspection failed: Error reading or processing Delta table: {e}")
@@ -127,7 +123,7 @@ class LloguerFormattedZone:
                 .mode("overwrite") \
                 .option("overwriteSchema", "true") \
                 .save(self.output_path)
-            write_successful = True # Mark write as successful
+            write_successful = True
             print(f"Formatted Lloguer data successfully written to {self.output_path}")
 
             # 4. Inspect if requested and write was successful
@@ -150,7 +146,6 @@ if __name__ == "__main__":
     try:
         spark = get_spark_session()
         formatter = LloguerFormattedZone(spark=spark)
-        # Set verbose=True to inspect the output Delta table after writing
         formatter.run(verbose=True)
 
     except Exception as main_error:

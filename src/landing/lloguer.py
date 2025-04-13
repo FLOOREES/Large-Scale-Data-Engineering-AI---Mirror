@@ -4,7 +4,7 @@ import time
 import logging
 import os
 from typing import List, Dict, Any
-import pyarrow # Ensure pyarrow is available
+import pyarrow
 
 # --- Configuration ---
 logging.basicConfig(
@@ -22,14 +22,11 @@ class LloguerLandingZone:
     Relies on standard exceptions for error handling.
     """
     def __init__(self):
-        # --- Configuration moved inside __init__ for encapsulation ---
         self.api_url = "https://analisi.transparenciacatalunya.cat/resource/qww9-bvhh.json"
-        # Define base output dir and filename separately
         self.output_parquet_path = "./data/landing/lloguer.parquet"
         self.request_limit = 1000
         self.request_delay = 0.5
         self.timeout = 60
-        # ----------------------------------------------------------
 
         logger.info(f"Lloguer initialized:")
         logger.info(f"  API URL: {self.api_url}")
@@ -45,7 +42,7 @@ class LloguerLandingZone:
         logger.debug(f"Fetching page: offset={offset}, limit={self.request_limit}")
         try:
             response = requests.get(self.api_url, params=params, timeout=self.timeout)
-            response.raise_for_status() # Check for HTTP 4xx/5xx errors
+            response.raise_for_status()
 
             if not response.content:
                 logger.debug(f"Empty response body received for offset {offset}.")
@@ -57,19 +54,18 @@ class LloguerLandingZone:
         # Catch specific requests exceptions first for potentially better context
         except requests.exceptions.Timeout as e:
             logger.error(f"Request timed out (>{self.timeout}s) for offset {offset}", exc_info=True)
-            raise # Re-raise the original exception
+            raise
         except requests.exceptions.HTTPError as e:
             logger.error(f"HTTP Error {e.response.status_code} for offset {offset}. Response: '{e.response.text[:200]}...'", exc_info=True)
             raise
         except requests.exceptions.RequestException as e:
             logger.error(f"Network error during request for offset {offset}: {e}", exc_info=True)
             raise
-        except ValueError as e: # Catches json.JSONDecodeError
+        except ValueError as e:
             logger.error(f"Failed to decode JSON response for offset {offset}", exc_info=True)
-            # Add response text to log if possible
             try:
                  logger.error(f"Response text causing JSON error: {response.text[:500]}...")
-            except Exception: pass # Ignore errors during logging response text
+            except Exception: pass 
             raise
 
     def fetch_all_data(self) -> List[Dict[str, Any]]:
@@ -82,7 +78,6 @@ class LloguerLandingZone:
         logger.info("Starting full data fetch...")
 
         while True:
-            # Error handling moved to _fetch_data_page, exceptions will propagate up
             data_page = self._fetch_data_page(offset)
 
             if not data_page: # Empty list signifies end of data
@@ -126,7 +121,6 @@ class LloguerLandingZone:
 
             logger.info(f"Writing {len(df)} records using engine 'pyarrow'...")
             start_time = time.time()
-            # Use pyarrow engine, specify index=False unless the index is meaningful
             df.to_parquet(self.output_parquet_path, engine='pyarrow', index=False)
             end_time = time.time()
             logger.info(f"Successfully saved data to {self.output_parquet_path} in {end_time - start_time:.2f} seconds.")
@@ -138,7 +132,7 @@ class LloguerLandingZone:
         except (IOError, OSError, pyarrow.lib.ArrowException) as e:
             logger.error(f"Error writing Parquet file to {self.output_parquet_path}: {e}", exc_info=True)
             raise
-        except Exception as e: # Catch any other unexpected errors during save
+        except Exception as e:
              logger.error(f"An unexpected error occurred during Parquet save: {e}", exc_info=True)
              raise
 
@@ -156,7 +150,7 @@ class LloguerLandingZone:
             # 1. Show Schema/Info
             logger.info("\nDataFrame Info (Schema):")
             print("-------------------- Schema --------------------")
-            df_check.info(verbose=True, show_counts=True) # More detailed info
+            df_check.info(verbose=True, show_counts=True)
             print("------------------------------------------------")
 
             # 2. Show Sample Data
@@ -164,9 +158,6 @@ class LloguerLandingZone:
             print("-------------------- Sample --------------------")
             print(df_check.head().to_string())
             print("------------------------------------------------")
-
-            # 3. Optional: Add more specific checks if needed later
-            # e.g., check for nulls in key columns, count distinct values, etc.
 
         except Exception as inspect_err:
             logger.error(f"Inspection failed: Error reading or processing the Parquet file: {inspect_err}", exc_info=True)
@@ -183,15 +174,14 @@ class LloguerLandingZone:
             verbose (bool): If True, inspect the saved Parquet file after writing. Defaults to False.
         """
         logger.info(f"--- Starting Lloguer Run (Verbose: {verbose}) ---")
-        saved_count = False # Initialize to False to indicate no records saved yet
+        saved_count = False
         try:
             fetched_data = self.fetch_all_data()
 
             if fetched_data:
-                 saved_count = self.save_to_parquet(fetched_data) # save_to_parquet now returns count
+                 saved_count = self.save_to_parquet(fetched_data)
                  logger.info(f"--- Lloguer Run Completed Successfully. Saved {saved_count} records. ---")
 
-                 # Perform inspection if requested and save was successful
                  if verbose and saved_count > 0:
                       self._inspect_output_file()
 
@@ -199,6 +189,5 @@ class LloguerLandingZone:
                  logger.info("--- Lloguer Run Completed: No data fetched or saved. ---")
 
         except Exception as e:
-            # Specific errors logged in fetch/save methods. This catches the failure.
             logger.error(f"--- Lloguer Run Failed. See previous logs for error details. ---", exc_info=False)
-            raise # Re-raise the exception to signal failure to the caller
+            raise 

@@ -3,21 +3,20 @@ import json
 
 class RFDBCLandingZone:
     def __init__(self) -> None:
-        # URL for specific table: RFDB i RFDB per habitant. Municipis. 2010-2021.
         self.api_url = "https://api.idescat.cat/taules/v2/rfdbc/13301/14148/mun/data"
 
     def fetch_data(self):
         """Fetches data from the API."""
         try:
             response = requests.get(self.api_url)
-            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+            response.raise_for_status() 
             return response.json()
         except requests.exceptions.RequestException as e:
             print(f"Error fetching data from API: {e}")
             return None
         except requests.exceptions.JSONDecodeError:
             print(f"Error decoding JSON response from API.")
-            print(f"Response text: {response.text[:500]}...") # Print first 500 chars for debugging
+            print(f"Response text: {response.text[:500]}...")
             return None
 
     def run(self, output_path = "./data/landing/rfdbc.json"):

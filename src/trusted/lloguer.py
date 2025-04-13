@@ -72,7 +72,7 @@ class LloguerTrustedZone:
             initial_count = df_formatted.count()
             if initial_count == 0:
                 print("Input data is empty. Skipping processing.")
-                return # Exit early if no data
+                return
             print(f"Initial row count from Formatted Zone: {initial_count}")
             print("Schema read from Formatted Zone:")
             df_formatted.printSchema()
@@ -112,14 +112,14 @@ class LloguerTrustedZone:
             df_filtered = df_filtered.filter(F.col("renda").isNull() | (F.col("renda") > 0))
             count_after_renda_check = df_filtered.count()
             print(f"Rows after 'renda' > 0 (or NULL) check: {count_after_renda_check} (Removed: {current_count - count_after_renda_check})")
-            current_count = count_after_renda_check # This is the count before deduplication
+            current_count = count_after_renda_check # Count before deduplication
 
             print("\n--- Examination: Calculating Unique Municipality-Year Combinations ---")
             # Select distinct combinations of municipality code and year from the filtered data
             df_distinct_muni_year = df_filtered.select("codi_territorial", "any").distinct()
             total_unique_muni_year_combinations = df_distinct_muni_year.count()
             print(f"Total unique municipality-year combinations found in filtered data: {total_unique_muni_year_combinations}")
-            # Note: This count represents the number of effective 'annual records' per municipality
+            # This count represents the number of effective 'annual records' per municipality
 
             # --- Check for Duplicates with Value Differences (Step 3) ---
             key_columns_dedup = ["ambit_territorial", "nom_territori", "codi_territorial", "any", "periode", "tram_preus"]
@@ -162,7 +162,7 @@ class LloguerTrustedZone:
 
             # 4. Deduplication (Still applying the original strategy for now)
             print(f"\nApplying deduplication based on columns: {key_columns_dedup}")
-            # Note: This step WILL arbitrarily remove rows if conflicting keys were found above.
+            # This step WILL arbitrarily remove rows if conflicting keys were found above.
             # Consider aggregation or window functions if those variations need to be handled differently.
             df_deduplicated = df_filtered.dropDuplicates(key_columns_dedup)
             count_after_dedup = df_deduplicated.count()
@@ -192,7 +192,7 @@ class LloguerTrustedZone:
             traceback.print_exc()
             print("--- Lloguer Trusted Zone Task Failed ---")
 
-# --- Main Execution Block (Identical) ---
+# --- Main Execution Block ---
 if __name__ == "__main__":
     spark = None
     try:
@@ -200,7 +200,7 @@ if __name__ == "__main__":
 
         spark = get_spark_session()
         truster = LloguerTrustedZone(spark=spark)
-        truster.run(verbose=True) # Keep verbose=True to see the check results
+        truster.run(verbose=True)
     except Exception as main_error:
         print(f"An unexpected error occurred in the main execution block: {main_error}")
         import traceback

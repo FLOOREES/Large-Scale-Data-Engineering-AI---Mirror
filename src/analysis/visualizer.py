@@ -25,14 +25,13 @@ class CatalanAffordabilityVisualizer:
     for each year with valid data.
     """
 
-    # --- Default Configuration (can be overridden via __init__) ---
     MUN_CODE_COLUMN_IN_SHAPEFILE = "CODI_INE"
     RENT_COLUMN = "avg_monthly_rent_eur"
     INCOME_COLUMN = "salary_per_capita_eur" # Using salary as the best available income proxy
     COLOR_MAP = 'RdYlGn_r'  # Red-Yellow-Green (Reversed: Low=Green, High=Red)
     COLORBAR_LABEL = "Affordability (% Monthly Rent * 12 / Annual Salary)"
-    VMIN = 10  # Minimum percentage for color scale (e.g., 10%)
-    VMAX = 50  # Maximum percentage for color scale (e.g., 50%)
+    VMIN = 10  # Minimum percentage for color scale 
+    VMAX = 50  # Maximum percentage for color scale
     MISSING_DATA_COLOR = 'lightgrey'
     MISSING_DATA_LABEL = 'Missing Data'
     # --------------------------------------------------------------
@@ -51,7 +50,6 @@ class CatalanAffordabilityVisualizer:
         self.exploitation_data_path = exploitation_data_path
         self.shapefile_path = Path(shapefile_path)
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True) # Ensure output directory exists
         # ------------------------------------
 
         self.spark = spark
@@ -86,8 +84,7 @@ class CatalanAffordabilityVisualizer:
                 print(f"Available columns: {list(self.catalunya_map_gdf.columns)}")
                 return False
             print(f"Using column '{self.MUN_CODE_COLUMN_IN_SHAPEFILE}' for municipality code.")
-            # Ensure the merge key is string type later during merge preparation
-            # self.catalunya_map_gdf[self.MUN_CODE_COLUMN_IN_SHAPEFILE] = self.catalunya_map_gdf[self.MUN_CODE_COLUMN_IN_SHAPEFILE].astype(str)
+
             return True
         except Exception as e:
             print(f"ERROR loading shapefile: {e}")
@@ -147,14 +144,12 @@ class CatalanAffordabilityVisualizer:
     def _calculate_affordability_numeric(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculates rent-to-income ratio numerically on a Pandas DataFrame."""
         df_calc = df.copy()
-        # print("Calculating affordability ratios...") # Reduced verbosity
         df_calc['yearly_rent'] = df_calc[self.RENT_COLUMN] * 12
         df_calc['affordability_pct'] = np.where(
             (df_calc[self.INCOME_COLUMN].notna()) & (df_calc[self.INCOME_COLUMN] > 0) & (df_calc['yearly_rent'].notna()),
             (df_calc['yearly_rent'] / df_calc[self.INCOME_COLUMN]) * 100,
             np.nan # Assign NaN if income is missing/zero or rent is missing
         )
-        # print("Affordability calculation complete.") # Reduced verbosity
         return df_calc
 
     def _plot_affordability_map_continuous(self, year: int, stats_data_for_year: pd.DataFrame):
@@ -202,13 +197,11 @@ class CatalanAffordabilityVisualizer:
                 },
             missing_kwds={             # How to draw areas with missing data
                 "color": self.MISSING_DATA_COLOR,
-                #"hatch": "///",       # Optional hatching
                 "edgecolor": "grey",
                 "label": self.MISSING_DATA_LABEL # This label might not show unless explicitly added to legend
                 },
             vmin=self.VMIN,            # Set the minimum value for the color scale
             vmax=self.VMAX             # Set the maximum value for the color scale
-            # scheme='quantiles', k=5 # Optional: Use classification scheme instead of pure continuous
         )
 
         # 4. Customize Appearance
@@ -219,17 +212,6 @@ class CatalanAffordabilityVisualizer:
                     xy=(0.1, .08), xycoords='figure fraction',
                     horizontalalignment='left', verticalalignment='top',
                     fontsize=8, color='#555555')
-        # Add a legend entry for missing data manually if needed (often tricky with missing_kwds)
-        # import matplotlib.patches as mpatches
-        # missing_patch = mpatches.Patch(color=self.MISSING_DATA_COLOR, label=self.MISSING_DATA_LABEL)
-        # existing_legend = ax.get_legend()
-        # if existing_legend:
-        #     handles, labels = existing_legend.get_legend_handles_labels()
-        #     handles.append(missing_patch)
-        #     labels.append(self.MISSING_DATA_LABEL)
-        #     ax.legend(handles=handles, labels=labels, loc='lower left')
-        # else: # If no colorbar legend was created (e.g., all data missing)
-        #     ax.legend(handles=[missing_patch], loc='lower left')
 
 
         # 5. Save the figure
@@ -252,7 +234,7 @@ class CatalanAffordabilityVisualizer:
             # --- Step 2: Load Shapefile ---
             if not self._load_shapefile():
                 print("Exiting due to shapefile loading error.")
-                return # Exit run method
+                return 
 
             # --- Step 3: Load Full Statistical Data from Spark ---
             if not self._load_and_prepare_stats_data_spark():
@@ -264,7 +246,7 @@ class CatalanAffordabilityVisualizer:
 
             if not valid_years:
                 print("No years found with sufficient data for plotting. Exiting.")
-                return # Exit run method
+                return 
 
             # --- Step 5: Convert Full Relevant Data to Pandas ONCE ---
             print("\nConverting relevant Spark DataFrame data to Pandas DataFrame for plotting...")
@@ -280,7 +262,7 @@ class CatalanAffordabilityVisualizer:
             print(f"\n--- Starting Map Generation Loop for Years: {valid_years} ---")
             for year in valid_years:
                 # Filter the PANDAS DataFrame for the current year
-                stats_data_this_year = self.stats_df_pandas[self.stats_df_pandas['any'] == year].copy() # Use .copy() to avoid SettingWithCopyWarning
+                stats_data_this_year = self.stats_df_pandas[self.stats_df_pandas['any'] == year].copy() 
 
                 if stats_data_this_year.empty:
                     print(f"Warning: No data after filtering Pandas DF for year {year}. Skipping plot.")

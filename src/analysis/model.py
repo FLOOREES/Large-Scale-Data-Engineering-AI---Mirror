@@ -1,24 +1,19 @@
-# data_analysis_pipeline.py
-
 from pathlib import Path
 from typing import List
 import traceback
 import datetime
-import joblib #type: ignore
+import joblib
 
-# --- Core Imports ---
 import pandas as pd
 import numpy as np
 
 from pyspark.sql import SparkSession
 
-# --- ML Imports ---
-from sklearn.preprocessing import StandardScaler    #type: ignore
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error #type: ignore
-import lightgbm as lgb #type: ignore
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_absolute_percentage_error
+import lightgbm as lgb
 
-# --- Visualization ---
-import matplotlib.pyplot as plt #type: ignore
+import matplotlib.pyplot as plt
 
 class Model:
     """
@@ -29,14 +24,13 @@ class Model:
 
     def __init__(self, spark: SparkSession,
                  input_path: str = "./data/exploitation/municipal_annual",
-                 output_dir: str = "./data/analysis/model", # For plots/metrics
-                 model_dir: str = "./models", # For model artifacts
+                 output_dir: str = "./data/analysis/model",
+                 model_dir: str = "./models",
                  target_variable: str = "avg_monthly_rent_eur"):
-        # ... (init remains the same as your last version) ...
         self.spark = spark
         self.input_path = input_path
         self.output_dir = Path(output_dir)
-        self.model_dir = Path(model_dir) # Added model directory path
+        self.model_dir = Path(model_dir)
         self.target_variable = target_variable
         self.id_cols = ["municipality_id", "municipality_name", "comarca_name"]
         self.time_col = "any"
@@ -58,7 +52,6 @@ class Model:
         self.y_test: pd.Series = None
         self.model: lgb.LGBMRegressor = None
         self.scaler: StandardScaler = None
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.model_dir.mkdir(parents=True, exist_ok=True)
         print("Data Analysis Pipeline Initialized.")
         print(f"  Input Delta Path: {self.input_path}")
@@ -98,7 +91,6 @@ class Model:
         """Performs basic EDA on the loaded Pandas DataFrame."""
         if self.data_pd is None: return
         print("\n--- Step 2: Basic Data Analysis ---")
-        # ... (Keep identical) ...
         print("\nDataFrame Info:")
         self.data_pd.info()
         print("\nDescriptive Statistics (Numeric Columns):")
@@ -109,7 +101,6 @@ class Model:
         print(missing_counts[missing_counts > 0].to_string())
         print("\nBasic Data Analysis complete.")
 
-    # --- _feature_engineering remains unchanged ---
     def _feature_engineering(self):
         """Creates new features: lags, differences, rolling means."""
         if self.data_pd is None: return
@@ -122,7 +113,6 @@ class Model:
         contracts = "total_annual_contracts"
         engineered_features = []
 
-        # Lags (Keep as before)
         for col in [target, salary, contracts]:
             if col in self.data_pd.columns:
                 for lag in [1, 2]:
@@ -130,11 +120,11 @@ class Model:
                     self.data_pd[lag_col_name] = self.data_pd.groupby(self.id_cols)[col].shift(lag)
                     engineered_features.append(lag_col_name)
 
-        # Differences (CORRECTED: Use lag1 - lag2)
+        # Differences (Use lag1 - lag2)
         lag1_target_col = f"{target}_lag1"
         lag2_target_col = f"{target}_lag2"
         if lag1_target_col in self.data_pd.columns and lag2_target_col in self.data_pd.columns:
-             diff_col_name = f"{target}_diff1" # Name still represents 1-period difference
+             diff_col_name = f"{target}_diff1" # Name represents 1-period difference
              # Calculate difference between T-1 and T-2
              self.data_pd[diff_col_name] = self.data_pd[lag1_target_col] - self.data_pd[lag2_target_col]
              engineered_features.append(diff_col_name)
@@ -143,7 +133,6 @@ class Model:
              print(f"Skipping difference feature creation as lag1 or lag2 target column is missing.")
 
 
-        # Rolling Means (Keep as before - based on lag1)
         if lag1_target_col in self.data_pd.columns:
             roll_col_name = f"{target}_roll_mean3"
             self.data_pd[roll_col_name] = self.data_pd.groupby(self.id_cols)[lag1_target_col] \
@@ -200,7 +189,6 @@ class Model:
         print("\nSplitting data into training and testing sets (time-based)...")
         test_year = self.data_pd[self.time_col].max()
         print(f"Test year determined as: {test_year}")
-        # Use .copy() to explicitly create copies
         train_df = self.data_pd[self.data_pd[self.time_col] < test_year].copy()
         test_df = self.data_pd[self.data_pd[self.time_col] == test_year].copy()
         if len(train_df) == 0 or len(test_df) == 0:
@@ -228,9 +216,7 @@ class Model:
                     test_cats = self.X_test[col].cat.categories
                     if not train_cats.equals(test_cats):
                         print(f"WARNING: Categories for '{col}' differ between train and test AFTER split.")
-                        # This *shouldn't* happen if split correctly, but good to check.
-                        # If it does, we might need to re-apply categories like before:
-                        # self.X_test.loc[:, col] = pd.Categorical(self.X_test[col], categories=train_cats)
+
                 else:
                     print(f"Warning: Column '{col}' missing from train or test during category verification.")
             print("Test set category check complete (no explicit re-application done here).")
@@ -295,7 +281,7 @@ class Model:
              # Train directly on full training data if no validation set
              X_train_final = self.X_train
              y_train_final = self.y_train
-             n_estimators_final = 2000 # Use original large number if no early stopping
+             n_estimators_final = 2000 
         else:
              print(f"Using year {int(X_val[self.time_col].iloc[0])} as validation set for early stopping.")
              print(f"Initial training shape: {X_train_for_stopping.shape}, Validation shape: {X_val.shape}")
@@ -310,14 +296,13 @@ class Model:
         # --- LightGBM Parameters ---
         params = {
             'objective': 'regression_l1', 'metric': ['mae', 'rmse'],
-            # 'n_estimators': n_estimators_final, # Set n_estimators dynamically later
             'learning_rate': 0.03, 'feature_fraction': 0.8, 'bagging_fraction': 0.8,
             'bagging_freq': 1, 'num_leaves': 41, 'max_depth': -1, 'lambda_l1': 0.1,
             'lambda_l2': 0.1, 'verbose': -1, 'n_jobs': -1, 'seed': 42, 'boosting_type': 'gbdt'
         }
 
         print(f"\nStep 5a: Finding best iteration using validation set (if available)...")
-        temp_model = lgb.LGBMRegressor(**params, n_estimators=n_estimators_final) # Use high n_estimators here
+        temp_model = lgb.LGBMRegressor(**params, n_estimators=n_estimators_final)
 
         start_time_fit1 = datetime.datetime.now()
         categorical_features_in_X = [f for f in self.features if f in self.categorical_features]
@@ -368,7 +353,7 @@ class Model:
         print(f"VERIFICATION: Sample of features used for prediction on test set (Year {self.X_test[self.time_col].iloc[0]}):")
         # Show year, lag1 target, lag1 salary (demonstrates info available)
         cols_to_show = [self.time_col, f"{self.target_variable}_lag1"]
-        cols_to_show = [c for c in cols_to_show if c in self.X_test.columns] # Ensure columns exist
+        cols_to_show = [c for c in cols_to_show if c in self.X_test.columns]
         print(self.X_test[cols_to_show].head(5).to_string())
         # *** End Verification Print 3 ***
 
@@ -388,8 +373,7 @@ class Model:
         print(f"  Mean Absolute Percentage Error (MAPE): {mape:.2%}")
         print(f"  R-squared (R²):           {r2:.4f}")
 
-        # --- Plots (Keep as before) ---
-        # ... (Feature Importance, Pred vs Actual, Residual plots) ...
+        # --- Plots ---
         # --- Feature Importance Plot ---
         try:
             print("\nGenerating Feature Importance plot...")
@@ -441,13 +425,11 @@ class Model:
         except Exception as res_e:
              print(f"Could not generate Residual plot: {res_e}")
 
-    # --- run method remains unchanged ---
     def run(self):
         """Runs the full data analysis and modeling pipeline."""
         print("==================================================")
         print("=== Starting Data Analysis and Prediction Pipeline ===")
         print("==================================================")
-        # ... (Keep identical) ...
         try:
             self._load_data()
             self._analyze_data()
@@ -464,7 +446,7 @@ class Model:
             traceback.print_exc()
             print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
-# --- Main Execution Block (Unchanged) ---
+# --- Main Execution Block ---
 if __name__ == "__main__":
     from spark_session import get_spark_session
     spark = None

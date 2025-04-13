@@ -19,8 +19,6 @@ class IdescatTrustedZone:
         self.spark = spark
         self.input_path = str(input_path)
         self.output_path = str(output_path)
-        # We expect the schema to be the same as the formatted output,
-        # but we might read it dynamically or redefine if needed for clarity.
         print(f"Trusted Zone Initialized. Input: {self.input_path}, Output: {self.output_path}")
 
     def run(self):
@@ -81,10 +79,6 @@ class IdescatTrustedZone:
                 (F.col("indicator_id") != 'f329') | # Keep if not Latitude
                 ((F.col("indicator_id") == 'f329') & F.col("municipality_value").between(min_lat, max_lat)) # Or if Latitude and within bounds
             )
-            # Note: This doesn't explicitly handle NULL municipality_value for non-negative checks.
-            # If >= 0 comparison evaluates to null for null input, the row might be kept or dropped depending on Spark version/config.
-            # Explicitly checking F.col("municipality_value").isNull() might be needed if specific null handling is required.
-            # For simplicity here, we assume filtering based on the condition is sufficient.
 
             count_after_value_checks = df_filtered.count()
             print(f"Rows after value range checks: {count_after_value_checks} (Removed: {count_after_year_check - count_after_value_checks})")
@@ -121,7 +115,6 @@ if __name__ == "__main__":
     spark = None
     try:
         spark = get_spark_session()
-        # Instantiate and run the processor
         truster = IdescatTrustedZone(spark=spark)
         truster.run()
     except Exception as main_error:

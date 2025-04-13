@@ -61,7 +61,7 @@ class IdescatLandingZone:
             for root_node in root_nodes:
                  municipality_ids.extend(extract_municipalities(root_node))
 
-            unique_ids = sorted(list(set(municipality_ids))) # Ensure uniqueness and sort
+            unique_ids = sorted(list(set(municipality_ids)))
             if not unique_ids:
                  print("Warning: No municipality IDs extracted. Check API response structure.")
             else:
@@ -108,7 +108,7 @@ class IdescatLandingZone:
             if not isinstance(indicators_data, list): indicators_data = []
 
             for indicator in indicators_data:
-                if 'error' in indicator: continue # Skip indicators the API reported errors for
+                if 'error' in indicator: continue
 
                 indicator_id = indicator.get('id')
                 indicator_name_api = indicator.get('c')
@@ -129,9 +129,9 @@ class IdescatLandingZone:
                     "municipality_name": municipality_name,
                     "comarca_name": comarca_name,
                     "indicator_id": indicator_id,
-                    "indicator_name": indicator_name_api, # Keep original API name
+                    "indicator_name": indicator_name_api,
                     "reference_year": reference_year,
-                    "municipality_value": mun_val if mun_val != '_' else None, # Convert API missing ('_') to None
+                    "municipality_value": mun_val if mun_val != '_' else None, 
                     "comarca_value": com_val if com_val != '_' else None,
                     "catalunya_value": cat_val if cat_val != '_' else None,
                     "source_update_timestamp": updated_ts
@@ -139,11 +139,11 @@ class IdescatLandingZone:
             return results
 
         # Handle specific request/processing errors for this municipality
-        except requests.exceptions.Timeout: return [] # Don't print warnings for common errors in parallel runs
+        except requests.exceptions.Timeout: return []
         except requests.exceptions.HTTPError: return []
         except requests.exceptions.RequestException: return []
         except json.JSONDecodeError: return []
-        except Exception: return [] # Catch-all for unexpected issues
+        except Exception: return []
 
     def _process_and_save_data(self, fetched_data: List[Dict[str, Any]], save_csv: bool = False):
         """
@@ -157,7 +157,6 @@ class IdescatLandingZone:
 
         df_landing = pd.DataFrame(fetched_data)
 
-        # --- Data Cleaning and Type Conversion ---
         numeric_cols = ['municipality_value', 'comarca_value', 'catalunya_value']
         for col in numeric_cols:
             df_landing[col] = pd.to_numeric(df_landing[col], errors='coerce')
@@ -177,7 +176,7 @@ class IdescatLandingZone:
         existing_columns = [col for col in desired_order if col in df_landing.columns]
         df_landing = df_landing[existing_columns]
 
-        # Save to Parquet (Primary Format)
+        # Save to Parquet
         parquet_output_path = "./data/landing/idescat.parquet"
         try:
             df_landing.to_parquet(parquet_output_path, index=False, engine='pyarrow')
@@ -218,8 +217,8 @@ class IdescatLandingZone:
             # Process results as they complete
             for future in tqdm(as_completed(futures), total=total_municipalities, unit="municipality"):
                 try:
-                    result = future.result() # Get results from completed future
-                    if result: # Check if any data was returned
+                    result = future.result()
+                    if result:
                         all_data_for_landing.extend(result)
                 except Exception as exc:
                      # Catch potential errors during future.result() itself

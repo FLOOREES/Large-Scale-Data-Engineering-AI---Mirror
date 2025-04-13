@@ -65,8 +65,6 @@ class RFDBCFormattedZone:
         Defines the schema that matches the structure produced *directly*
         by the _transform_data function (using original dimension names).
         """
-        # Assumes dimensions are YEAR, MUN, CONCEPT, INDICATOR as per JSON structure
-        # If dimensions could change, this might need to be more dynamic
         return StructType([
             StructField("YEAR_CODE", StringType(), True),
             StructField("YEAR_LABEL", StringType(), True),
@@ -108,7 +106,7 @@ class RFDBCFormattedZone:
             return []
 
         try:
-            dimensions = data['id'] # List of dimension names (e.g., ['YEAR', 'MUN', ...])
+            dimensions = data['id']
             if 'dimension' not in data:
                 print("Error: Missing 'dimension' key in input data.")
                 return []
@@ -131,7 +129,7 @@ class RFDBCFormattedZone:
                 dim_labels[dim] = data['dimension'][dim]['category'].get('label', {}) # Safely get labels
 
 
-            values = data.get('value', []) # Use .get for safety
+            values = data.get('value', [])
 
             category_lists = [dim_categories[dim] for dim in dimensions]
             combinations = itertools.product(*category_lists)
@@ -167,7 +165,6 @@ class RFDBCFormattedZone:
                 combo_dict = dict(zip(dimensions, combo))
 
                 # Dynamically create CODE and LABEL fields for each dimension
-                # *** This part still uses the original dimension names ***
                 for dim in dimensions:
                     code = combo_dict[dim]
                     record[f"{dim}_CODE"] = str(code) # Ensure code is string
@@ -193,7 +190,6 @@ class RFDBCFormattedZone:
                 print(f"Warning: Number of values in input data ({len(values)}) does not match calculated expected size based on dimensions ({expected_size}). Data might be incomplete or dimension definitions inconsistent.")
 
             if processed_count != len(values) and not (expected_size >= 0 and processed_count == expected_size):
-                 # This warning is nuanced. It's mainly relevant if StopIteration didn't occur correctly or if expected_size was calculable.
                  print(f"Warning: Number of generated records ({processed_count}) differs from number of values ({len(values)}) and potentially the expected size ({expected_size if expected_size >=0 else 'unknown'}). Check for data inconsistencies or value list truncation.")
 
 
@@ -229,7 +225,6 @@ class RFDBCFormattedZone:
 
             # 2. Create Spark DataFrame using the INTERMEDIATE schema
             print("Creating intermediate Spark DataFrame...")
-            # The keys in 'records' MUST match the field names in intermediate_schema
             df_intermediate = self.spark.createDataFrame(records, schema=self.intermediate_schema)
 
             print("Intermediate Spark DataFrame created successfully. Schema:")
@@ -238,7 +233,6 @@ class RFDBCFormattedZone:
             # 3. Rename columns to match the TARGET schema
             print("Renaming columns for final output...")
             df_formatted = df_intermediate
-            # Using select with alias for potentially better performance and clarity
             select_exprs = []
             for original_name, new_name in self.column_mapping.items():
                  if original_name in df_intermediate.columns:
@@ -249,9 +243,7 @@ class RFDBCFormattedZone:
             # Ensure all columns intended for the target schema are selected
             if len(select_exprs) != len(self.target_schema.fields):
                  print(f"Warning: Number of selected columns ({len(select_exprs)}) after renaming does not match target schema fields ({len(self.target_schema.fields)}). Check mapping and intermediate schema.")
-                 # Fallback or error handling could be added here if needed.
-                 # For now, proceed with selected columns.
-                 final_columns = [expr.alias for expr in select_exprs] # Get the names of the columns we are actually selecting
+                 final_columns = [expr.alias for expr in select_exprs]
                  print(f"Proceeding with columns: {final_columns}")
                  df_formatted = df_intermediate.select(*select_exprs)
 
@@ -261,7 +253,6 @@ class RFDBCFormattedZone:
 
             print("Columns renamed. Final Schema:")
             df_formatted.printSchema()
-            # Verify schema matches target (optional but recommended)
             if df_formatted.schema != self.target_schema:
                 print("Warning: Renamed DataFrame schema does not exactly match target schema definition. This might happen due to ordering or slight type differences if not strictly controlled.")
                 print("Actual Schema:", df_formatted.schema)
@@ -294,7 +285,6 @@ if __name__ == "__main__":
     try:
         spark = get_spark_session()
 
-        # Instantiate and run the formatter
         formatter = RFDBCFormattedZone(
             spark=spark
         )

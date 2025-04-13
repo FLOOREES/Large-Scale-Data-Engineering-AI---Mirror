@@ -63,11 +63,10 @@ class RFDBCTrustedZone:
         else:
             print(f"Warning: Column to rename '{col_to_rename}' not found.")
 
-        # Modify 'municipality_id' - remove last digit
+        # Modify 'municipality_id' - remove last digit to get 5-digit ID
         mun_col = "municipality_id"
         if mun_col in df_modified.columns:
             print(f"Modifying column '{mun_col}': Removing last digit.")
-            # Ensure cast to string for length calculation
             df_modified = df_modified.withColumn(
                 mun_col,
                 F.expr(f"substring(cast({mun_col} as string), 1, length(cast({mun_col} as string)) - 1)")
@@ -125,7 +124,7 @@ class RFDBCTrustedZone:
              print(f"Warning: Column '{year_col}' not found. Skipping year constraint.")
 
         # --- 3. Apply Denial Constraint: Municipality ID Length == 5 ---
-        mun_col = "municipality_id" # This is the modified ID
+        mun_col = "municipality_id"
         if mun_col in current_df.columns:
             print(f"\nApplying constraint: length of '{mun_col}' must be 5.")
             # Length function works on strings
@@ -215,7 +214,6 @@ if __name__ == "__main__":
     try:
         spark = get_spark_session()
 
-        # Instantiate and run the Trusted Zone processor
         processor = RFDBCTrustedZone(
             spark=spark
         )
