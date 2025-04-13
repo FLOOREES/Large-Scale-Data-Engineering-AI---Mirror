@@ -7,6 +7,5 @@ if __name__ == "__main__":
 	make_folder_structure()
 	spark = get_spark_session()
 
-	pipeline = Pipeline(spark=spark, max_stage=5, analysis="map")
+	pipeline = Pipeline(spark=spark, max_stage=5, analysis="both")
 	pipeline.run()
-	print("Pipeline completed successfully.")

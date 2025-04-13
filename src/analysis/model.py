@@ -367,7 +367,7 @@ class Model:
         # *** Verification Print 3: Sample of Test Features ***
         print(f"VERIFICATION: Sample of features used for prediction on test set (Year {self.X_test[self.time_col].iloc[0]}):")
         # Show year, lag1 target, lag1 salary (demonstrates info available)
-        cols_to_show = [self.time_col, f"{self.target_variable}_lag1", "salary_per_capita_eur_lag1"]
+        cols_to_show = [self.time_col, f"{self.target_variable}_lag1"]
         cols_to_show = [c for c in cols_to_show if c in self.X_test.columns] # Ensure columns exist
         print(self.X_test[cols_to_show].head(5).to_string())
         # *** End Verification Print 3 ***
