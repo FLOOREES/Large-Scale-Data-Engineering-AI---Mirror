@@ -1,5 +1,7 @@
 from pyspark.sql import SparkSession
 
+from utils import generate_gif
+
 from landing.landing import LandingZone
 from formatted.formatted import FormattedZone
 from trusted.trusted import TrustedZone
@@ -53,8 +55,10 @@ class Pipeline:
 			if self.analysis == "both":
 				self.visualizer.run()
 				self.model.run()
+				generate_gif()
 			elif self.analysis == "visualizer":
 				self.visualizer.run()
+				generate_gif()
 			elif self.analysis == "model":
 				self.model.run()
 
