@@ -11,7 +11,7 @@ def make_folder_structure():
         "data/landing",
         "data/formatted",
         "data/trusted",
-        "data/exploitaition"
+        "data/exploitation"
     ]
 
     for folder in folders:

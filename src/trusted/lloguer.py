@@ -114,6 +114,13 @@ class LloguerTrustedZone:
             print(f"Rows after 'renda' > 0 (or NULL) check: {count_after_renda_check} (Removed: {current_count - count_after_renda_check})")
             current_count = count_after_renda_check # This is the count before deduplication
 
+            print("\n--- Examination: Calculating Unique Municipality-Year Combinations ---")
+            # Select distinct combinations of municipality code and year from the filtered data
+            df_distinct_muni_year = df_filtered.select("codi_territorial", "any").distinct()
+            total_unique_muni_year_combinations = df_distinct_muni_year.count()
+            print(f"Total unique municipality-year combinations found in filtered data: {total_unique_muni_year_combinations}")
+            # Note: This count represents the number of effective 'annual records' per municipality
+
             # --- Check for Duplicates with Value Differences (Step 3) ---
             key_columns_dedup = ["ambit_territorial", "nom_territori", "codi_territorial", "any", "periode", "tram_preus"]
             print("\n--- Checking for duplicate keys with differing values ---")
