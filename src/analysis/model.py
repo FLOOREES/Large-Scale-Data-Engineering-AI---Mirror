@@ -29,7 +29,7 @@ class DataAnalysisPipeline:
 
     def __init__(self, spark: SparkSession,
                  input_path: str = "./data/exploitation",
-                 output_dir: str = "./data/analysis_outputs", # For plots/metrics
+                 output_dir: str = "./data/analysis/model", # For plots/metrics
                  model_dir: str = "./models", # For model artifacts
                  target_variable: str = "avg_monthly_rent_eur"):
         # ... (init remains the same as your last version) ...
