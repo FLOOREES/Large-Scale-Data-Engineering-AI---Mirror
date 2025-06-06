@@ -1,4 +1,8 @@
-numpy
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch
+torchvision
+torchaudio
+numpy==2.2.6
 pandas==2.2.3
 scikit-learn==1.6.1
 matplotlib==3.10.1
@@ -6,7 +10,7 @@ lightgbm==4.6.0
 pyspark==3.5.5
 pyarrow==19.0.1
 geopandas==1.0.1
-jupyter_client
-ipykernel
 requests==2.32.3
 tqdm==4.67.1
+rdflib==7.1.4
+owlrl==7.1.3
