@@ -12,7 +12,7 @@ from pyspark.sql import functions as F
 # ---------------------
 
 # --- Spark Session Utility (Keep external or move inside if preferred) ---
-from src.spark_session import get_spark_session
+from spark_session import get_spark_session
 # -----------------------------------------------------------------------
 
 
