@@ -1,4 +1,4 @@
-# exploitation_zone_kg_v2.py
+# exploitation_zone_kg.py
 
 import json
 from pathlib import Path
@@ -6,16 +6,16 @@ import traceback
 from tqdm import tqdm
 import pandas as pd
 
-# --- Imports de RDFLib ---
+# --- RDFLib Imports ---
 from rdflib import Graph, URIRef, Literal, Namespace
 from rdflib.namespace import RDF, RDFS, XSD
 
-# --- Imports de PySpark ---
+# --- PySpark Imports ---
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
-# --- Configuració ---
+# --- Configuration ---
 PROJ = Namespace("http://example.com/catalonia-ontology/")
 TRUSTED_DIR = Path("./data/trusted/")
 RELATIONS_DIR = Path("./data/relations/")
@@ -24,14 +24,18 @@ EXPLOITATION_DIR.mkdir(parents=True, exist_ok=True)
 
 class KGExploitationZone:
     """
-    Orquestra la creació d'un Knowledge Graph integrat a partir de les
-    dades de la Trusted Zone i fitxers de relacions geogràfiques.
+    Orchestrates the creation of a fully reified and comprehensive Knowledge Graph.
+    This version ensures all trusted data is represented, including imputed rent,
+    and models Idescat indicators as individual observation nodes.
     """
 
     def __init__(self, spark: SparkSession):
         self.spark = spark
         self.graph = self._initialize_graph()
-        print("Knowledge Graph Exploitation Zone Initialized.")
+        # This map is the single source of truth for indicator names.
+        # It's crucial for creating readable URIs and labels.
+        self.indicator_map = self._define_indicator_map()
+        print("Knowledge Graph Exploitation Zone Initialized (Definitive Model).")
 
     def _initialize_graph(self) -> Graph:
         g = Graph()
@@ -41,90 +45,100 @@ class KGExploitationZone:
         g.bind("xsd", XSD)
         return g
 
+    def _define_indicator_map(self) -> dict:
+        """Maps Idescat indicator IDs to clean, readable names for the KG."""
+        return {
+            'f171': 'Population', 'f36': 'PopulationMen', 'f42': 'PopulationWomen',
+            'f187': 'BirthsTotal', 'f183': 'PopulationSpanishNat',
+            'f261': 'SurfaceKM2', 'f262': 'DensityPopKM2',
+            'f328': 'Longitude', 'f329': 'Latitude',
+            'f308': 'UnemploymentTotal', 'f191': 'TotalFamilyDwellings',
+            'f270': 'PublicLibrariesCount', 'f293': 'SportsPavilionsCount',
+            'f294': 'MultiSportsCourtsCount', 'f301': 'IndoorPoolsCount'
+        }
+
     def _load_data(self) -> dict:
-        print("\n--- Pas 1: Carregant totes les fonts de dades ---")
+        """Loads all necessary data sources (Delta tables and JSON files)."""
+        print("\n--- Step 1: Loading all data sources ---")
         data = {}
         try:
             data['idescat'] = self.spark.read.format("delta").load(str(TRUSTED_DIR / "idescat"))
             data['lloguer'] = self.spark.read.format("delta").load(str(TRUSTED_DIR / "lloguer"))
             data['rfdbc'] = self.spark.read.format("delta").load(str(TRUSTED_DIR / "rfdbc"))
-            print("Taules Delta de la Trusted Zone carregades amb èxit.")
+            print("Trusted Zone Delta tables loaded successfully.")
 
-            with open(RELATIONS_DIR / "municipality_neighbors.json", 'r') as f:
-                data['mun_neighbors'] = json.load(f)
-            with open(RELATIONS_DIR / "comarca_neighbors.json", 'r') as f:
-                data['com_neighbors'] = json.load(f)
-            with open(RELATIONS_DIR / "comarca_to_province.json", 'r') as f:
-                data['com_to_prov'] = json.load(f)
-            print("Fitxers de relacions JSON carregats amb èxit.")
+            with open(RELATIONS_DIR / "municipality_neighbors.json", 'r') as f: data['mun_neighbors'] = json.load(f)
+            with open(RELATIONS_DIR / "comarca_neighbors.json", 'r') as f: data['com_neighbors'] = json.load(f)
+            with open(RELATIONS_DIR / "comarca_to_province.json", 'r') as f: data['com_to_prov'] = json.load(f)
+            print("Geographic relation JSON files loaded successfully.")
             return data
         except Exception as e:
-            print(f"ERROR: No s'ha pogut carregar una o més fonts de dades. Detall: {e}")
+            print(f"ERROR: Could not load one or more data sources. Details: {e}")
             raise
 
     def _process_data_for_kg(self, data: dict) -> dict:
-        print("\n--- Pas 2: Processant DataFrames de Spark ---")
+        """Processes and transforms Spark DataFrames to prepare for triple generation."""
+        print("\n--- Step 2: Processing Spark DataFrames ---")
         
-        print("Processant Idescat: trobant l'últim valor per indicador i fent pivot...")
-        window_spec = Window.partitionBy("municipality_id", "indicator_id").orderBy(F.col("reference_year").desc())
-        df_idescat_latest = data['idescat'].withColumn("rank", F.row_number().over(window_spec)).filter(F.col("rank") == 1).drop("rank", "reference_year")
-        
-        # Guardem una versió no pivotada per als anys de referència
-        df_idescat_ref_years = data['idescat'].withColumn("rank", F.row_number().over(window_spec)).filter(F.col("rank") == 1).select("municipality_id", "indicator_id", "reference_year")
-
-        df_idescat_pivoted = df_idescat_latest.groupBy("municipality_id", "municipality_name", "comarca_name").pivot("indicator_id").agg(F.first("municipality_value"))
-        
-        print("Processant Lloguer: agregant anualment...")
-        df_lloguer_annual = data['lloguer'].filter(F.col("ambit_territorial") == "Municipi").groupBy("codi_territorial", "any").agg(
-            F.avg("renda").alias("avg_monthly_rent"),
-            F.sum("habitatges").alias("total_contracts")
+        print("Processing Lloguer data (imputing rent and aggregating)...")
+        df_lloguer_imputed = data['lloguer'].filter(F.col("ambit_territorial") == "Municipi").withColumn(
+            "renda_imputed",
+            F.when(F.col("renda").isNotNull(), F.col("renda"))
+             .when(F.col("tram_preus") == "<= 350 euros/mes", 325.0)
+             .when(F.col("tram_preus") == "> 350 i <= 450 euros/mes", 400.0)
+             .when(F.col("tram_preus") == "> 350 i <= 500 euros/mes", 425.0)
+             .when(F.col("tram_preus") == "> 450 i <= 600 euros/mes", 525.0)
+             .when(F.col("tram_preus") == "> 500 i <= 650 euros/mes", 575.0)
+             .when(F.col("tram_preus") == "> 600 euros/mes", 800.0)
+             .when(F.col("tram_preus") == "> 650 euros/mes", 900.0)
+             .otherwise(None)
+        )
+        df_lloguer_annual = df_lloguer_imputed.groupBy("codi_territorial", "any").agg(
+            F.sum("habitatges").alias("total_contracts"),
+            (F.sum(F.col("renda_imputed") * F.col("habitatges")) / F.sum("habitatges")).alias("avg_monthly_rent")
         ).withColumnRenamed("codi_territorial", "municipality_id")
         
-        print("Processant RFDBC: filtrant per renda per càpita...")
+        print("Processing RFDBC data...")
         df_rfdbc_annual = data['rfdbc'].filter(F.col("indicator_code") == "PER_CAPITA_EUR").select(
             F.col("municipality_id"),
             F.col("year").cast("integer").alias("any"),
             F.col("value").alias("household_income")
         )
 
-        print("Unint dades anuals de Lloguer i Ingressos...")
+        print("Joining annual Lloguer and RFDBC data...")
         df_annual_data = df_lloguer_annual.join(
             df_rfdbc_annual,
             ["municipality_id", "any"],
             "full_outer"
+        ).filter(
+            F.col("municipality_id").isNotNull() & F.col("any").isNotNull()
         )
         
+        print("Idescat data will be used in its 'long' format for reification.")
+        
         return {
-            "static_data": df_idescat_pivoted,
+            "idescat_data": data['idescat'],
             "annual_data": df_annual_data,
-            "ref_years": df_idescat_ref_years, # Afegim els anys de referència
-            **{k: v for k, v in data.items() if k not in ['idescat', 'lloguer', 'rfdbc']}
+            **{k: v for k, v in data.items() if k.endswith('_neighbors') or k.endswith('_prov')}
         }
 
     def _populate_graph(self, processed_data: dict):
-        """Itera sobre els DataFrames processats i els diccionaris per generar els triples RDF."""
-        print("\n--- Pas 3: Poblant el Knowledge Graph amb triples RDF ---")
+        """Iterates over data to generate and add fully reified RDF triples to the graph."""
+        print("\n--- Pas 3: Populating the Knowledge Graph (Reified Model) ---")
 
-        static_df = processed_data['static_data']
+        idescat_df = processed_data['idescat_data']
         annual_df = processed_data['annual_data']
-        ref_years_df = processed_data['ref_years']
         mun_neighbors = processed_data['mun_neighbors']
         com_neighbors = processed_data['com_neighbors']
         com_to_prov = processed_data['com_to_prov']
         
         created_nodes = set()
 
-        # Convertim el DataFrame de ref_years a un diccionari per a una cerca ràpida
-        ref_years_map = {(row.municipality_id, row.indicator_id): row.reference_year for row in ref_years_df.collect()}
-        
-        print("Generant nodes estàtics (Municipis, Comarques, Províncies) i les seves propietats...")
-        static_data_local = static_df.collect()
-
-        for row in tqdm(static_data_local, desc="Creant Nodes Estàtics"):
-            mun_id = row['municipality_id']
-            mun_name = row['municipality_name']
-            com_name = row['comarca_name']
-            
+        # 1. Create structural nodes (Municipality, Comarca, Province) and relationships
+        print("Generating structural nodes and relationships...")
+        geo_structure_df = idescat_df.select("municipality_id", "municipality_name", "comarca_name").distinct()
+        for row in tqdm(geo_structure_df.collect(), desc="Creating Geo Entities"):
+            mun_id, mun_name, com_name = row['municipality_id'], row['municipality_name'], row['comarca_name']
             if not mun_id or not com_name: continue
 
             mun_uri = PROJ[f"municipality/{mun_id}"]
@@ -149,80 +163,93 @@ class KGExploitationZone:
                         created_nodes.add(prov_uri)
                 created_nodes.add(com_uri)
 
-            # Afegir triples per a cada indicador d'Idescat com a propietat estàtica
-            for indicator_id in static_df.columns:
-                if indicator_id.startswith('f') and row[indicator_id] is not None:
-                    prop_name = f"latest_{indicator_id}" # Nom de propietat més descriptiu
-                    prop_uri = PROJ[prop_name]
-                    value = row[indicator_id]
-                    self.graph.add((mun_uri, prop_uri, Literal(value, datatype=XSD.double)))
-                    
-                    # AFEGIM L'ANY DE REFERÈNCIA
-                    ref_year = ref_years_map.get((mun_id, indicator_id))
-                    if ref_year:
-                        ref_year_prop_uri = PROJ[f"{prop_name}_refYear"]
-                        self.graph.add((mun_uri, ref_year_prop_uri, Literal(ref_year, datatype=XSD.gYear)))
-
-
-        print("Generant relacions de veïnatge...")
         for mun_id, data in mun_neighbors.items():
-            mun1_uri = PROJ[f"municipality/{mun_id}"]
             for neighbor in data['neighbors']:
-                mun2_uri = PROJ[f"municipality/{neighbor['id']}"]
-                self.graph.add((mun1_uri, PROJ.isNeighborOf, mun2_uri))
-
+                self.graph.add((PROJ[f"municipality/{mun_id}"], PROJ.isNeighborOf, PROJ[f"municipality/{neighbor['id']}"]))
         for com_name, data in com_neighbors.items():
-            com1_uri = PROJ[f"comarca/{com_name.replace(' ', '_')}"]
             for neighbor_name in data['neighbors']:
-                com2_uri = PROJ[f"comarca/{neighbor_name.replace(' ', '_')}"]
-                self.graph.add((com1_uri, PROJ.isAdjacentTo, com2_uri))
+                self.graph.add((PROJ[f"comarca/{com_name.replace(' ', '_')}"], PROJ.isAdjacentTo, PROJ[f"comarca/{neighbor_name.replace(' ', '_')}"]))
 
-        print("Generant nodes de dades anuals (AnnualDataPoint)...")
-        annual_data_local = annual_df.collect()
-        for row in tqdm(annual_data_local, desc="Creant Nodes Anuals"):
+        # 2. Create nodes for each Idescat indicator concept
+        print("Generating nodes for Idescat indicator concepts...")
+        for indicator_name in self.indicator_map.values():
+            indicator_uri = PROJ[f"indicator/{indicator_name}"]
+            if indicator_uri not in created_nodes:
+                # The node represents the concept of the indicator
+                self.graph.add((indicator_uri, RDF.type, PROJ.StatisticalIndicator))
+                self.graph.add((indicator_uri, RDFS.label, Literal(indicator_name)))
+                created_nodes.add(indicator_uri)
+
+        # 3. Create Idescat observations as reified nodes
+        print("Generating Idescat latest-value observations...")
+        window_spec = Window.partitionBy("municipality_id", "indicator_id").orderBy(F.col("reference_year").desc())
+        idescat_latest_df = idescat_df.withColumn("rank", F.row_number().over(window_spec)).filter(F.col("rank") == 1).drop("rank")
+        
+        for row in tqdm(idescat_latest_df.collect(), desc="Creating Idescat Observations"):
+            mun_id, indicator_id, value, ref_year = row['municipality_id'], row['indicator_id'], row['municipality_value'], row['reference_year']
+            if any(v is None for v in [mun_id, indicator_id, value, ref_year]): continue
+
+            indicator_name = self.indicator_map.get(indicator_id)
+            if not indicator_name: continue
+
+            # Create a unique URI for this specific observation (fact)
+            obs_uri = PROJ[f"observation/{mun_id}_{indicator_name}"]
+            mun_uri = PROJ[f"municipality/{mun_id}"]
+            indicator_uri = PROJ[f"indicator/{indicator_name}"]
+
+            # Add triples for the observation node
+            self.graph.add((obs_uri, RDF.type, PROJ.IndicatorObservation))
+            self.graph.add((obs_uri, RDFS.label, Literal(f"Observation of {indicator_name} for {mun_id}")))
+            self.graph.add((obs_uri, PROJ.hasValue, Literal(value, datatype=XSD.double)))
+            self.graph.add((obs_uri, PROJ.referenceYear, Literal(ref_year, datatype=XSD.gYear)))
+            
+            # Link the municipality to this observation and the observation to the indicator concept
+            self.graph.add((mun_uri, PROJ.hasObservation, obs_uri))
+            self.graph.add((obs_uri, PROJ.isAbout, indicator_uri))
+
+        # 4. Create AnnualDataPoint nodes for rent and income
+        print("Generating AnnualDataPoint nodes for rent and income...")
+        for row in tqdm(annual_df.toLocalIterator(), desc="Creating Annual Data Points"):
             mun_id = row['municipality_id']
             year = row['any']
             
-            if not mun_id or not year: continue
-            
             mun_uri = PROJ[f"municipality/{mun_id}"]
-            # URI i Label més descriptius per a l'AnnualDataPoint
-            datapoint_uri = PROJ[f"datapoint/{mun_id}_{year}"]
+            datapoint_uri = PROJ[f"datapoint/{mun_id}_{int(year)}"]
             
             self.graph.add((datapoint_uri, RDF.type, PROJ.AnnualDataPoint))
-            self.graph.add((datapoint_uri, RDFS.label, Literal(f"Data for {mun_id} in {year}")))
             self.graph.add((mun_uri, PROJ.hasAnnualData, datapoint_uri))
-            self.graph.add((datapoint_uri, PROJ.referenceYear, Literal(year, datatype=XSD.gYear)))
             
-            # Afegir dades només si no són null
-            if pd.notna(row['avg_monthly_rent']):
+            # Add properties only if they exist
+            if row['avg_monthly_rent'] is not None and pd.notna(row['avg_monthly_rent']):
                 self.graph.add((datapoint_uri, PROJ.avgMonthlyRent, Literal(row['avg_monthly_rent'], datatype=XSD.double)))
-            if pd.notna(row['household_income']):
+            if row['total_contracts'] is not None and pd.notna(row['total_contracts']):
+                self.graph.add((datapoint_uri, PROJ.totalContracts, Literal(row['total_contracts'], datatype=XSD.integer)))
+            if row['household_income'] is not None and pd.notna(row['household_income']):
                 self.graph.add((datapoint_uri, PROJ.householdIncome, Literal(row['household_income'], datatype=XSD.double)))
 
     def run(self):
+        """Executes the full Exploitation Zone pipeline."""
         try:
             raw_data = self._load_data()
             processed_data = self._process_data_for_kg(raw_data)
             self._populate_graph(processed_data)
             
             output_file = EXPLOITATION_DIR / "knowledge_graph.ttl"
-            print(f"\n--- Pas 4: Desant el Knowledge Graph a {output_file} ---")
+            print(f"\n--- Pas 4: Saving Knowledge Graph to {output_file} ---")
             self.graph.serialize(destination=str(output_file), format='turtle')
-            print(f"Graf desat amb èxit. Conté {len(self.graph)} triples.")
+            print(f"Graph saved successfully. Contains {len(self.graph)} triples.")
             print("\n--- Exploitation Zone (KG) Task Successfully Completed ---")
         except Exception as e:
-            print(f"!!! ERROR durant l'execució de la Zona d'Explotació: {e}")
+            print(f"!!! ERROR during Exploitation Zone execution: {e}")
             traceback.print_exc()
 
-# La funció get_spark_session roman igual
 def get_spark_session() -> SparkSession:
-    # ... (copiar la funció que ja tens) ...
+    """Initializes and returns a SparkSession configured for Delta Lake."""
     DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0"
     print("Initializing Spark Session...")
     try:
         spark = SparkSession.builder \
-            .appName("KG_Exploitation_Pipeline") \
+            .appName("KG_Exploitation_Pipeline_Final") \
             .master("local[*]") \
             .config("spark.jars.packages", DELTA_PACKAGE) \
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
@@ -243,5 +270,5 @@ if __name__ == "__main__":
         kg_processor.run()
     finally:
         if spark_session:
-            print("\nAturant Spark Session.")
+            print("\nStopping Spark Session.")
             spark_session.stop()
