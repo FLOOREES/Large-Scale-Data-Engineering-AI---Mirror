@@ -52,36 +52,36 @@ class IdescatTrustedZone:
             count_after_year_check = df_filtered.count()
             print(f"Rows after year range check ({min_year}-{max_year}): {count_after_year_check} (Removed: {count_after_null_keys - count_after_year_check})")
 
-            # Rule 3: Validate specific indicator values (Example Denial Constraints)
-            # Define non-negative indicators from your CHOSEN_INDICATORS list in landing zone
-            non_negative_indicators = [
-                'f171', 'f36', 'f42', 'f187', 'f183', # Population counts/births
-                'f261', 'f262',                       # Surface, Density
-                'f308',                               # Unemployment (assuming count >= 0)
-                'f191', 'f270', 'f293', 'f294', 'f301' # Housing, Libraries, Facilities counts
-            ]
-            # Define Lat/Lon bounds for Catalonia (approximate)
-            min_lon, max_lon = 0.0, 3.5
-            min_lat, max_lat = 40.5, 43.0
+            # Rule 3: Apply comprehensive validation rules for all relevant indicators
+            print("\nApplying comprehensive validation rules for indicator values...")
+            count_before_value_checks = df_filtered.count()
 
-            # Apply conditions using 'when'. We filter out rows where the condition is FALSE.
-            # Keep rows that don't match the indicator ID OR that match and satisfy the condition.
-            df_filtered = df_filtered.filter(
-                # Check non-negative indicators
-                (~F.col("indicator_id").isin(non_negative_indicators)) |
-                (F.col("indicator_id").isin(non_negative_indicators) & (F.col("municipality_value") >= 0))
-            ).filter(
-                # Check Longitude bounds
-                (F.col("indicator_id") != 'f328') | # Keep if not Longitude
-                ((F.col("indicator_id") == 'f328') & F.col("municipality_value").between(min_lon, max_lon)) # Or if Longitude and within bounds
-            ).filter(
-                # Check Latitude bounds
-                (F.col("indicator_id") != 'f329') | # Keep if not Latitude
-                ((F.col("indicator_id") == 'f329') & F.col("municipality_value").between(min_lat, max_lat)) # Or if Latitude and within bounds
+            # Define plausible value ranges for each indicator.
+            # This single 'when' statement replaces the multiple filters.
+            # If an indicator is not listed here, it is not checked and automatically kept.
+            df_validated = df_filtered.filter(
+                F.when(F.col("indicator_id") == 'f171', F.col("municipality_value").between(0, 2_000_000))   # Population
+                .when(F.col("indicator_id") == 'f36',  F.col("municipality_value").between(0, 1_000_000))   # Men
+                .when(F.col("indicator_id") == 'f42',  F.col("municipality_value").between(0, 1_000_000))   # Women
+                .when(F.col("indicator_id") == 'f187', F.col("municipality_value").between(0, 50_000))      # Births
+                .when(F.col("indicator_id") == 'f183', F.col("municipality_value").between(0, 2_000_000))   # Spanish Nationality Pop
+                .when(F.col("indicator_id") == 'f261', F.col("municipality_value").between(0, 500))         # Surface area (km²)
+                .when(F.col("indicator_id") == 'f262', F.col("municipality_value").between(0, 50_000))      # Density (Pop/km²)
+                .when(F.col("indicator_id") == 'f328', F.col("municipality_value").between(0.0, 3.5))       # Longitude
+                .when(F.col("indicator_id") == 'f329', F.col("municipality_value").between(40.5, 43.0))     # Latitude
+                .when(F.col("indicator_id") == 'f308', F.col("municipality_value").between(0, 500_000))     # Total Unemployment
+                .when(F.col("indicator_id") == 'f191', F.col("municipality_value").between(0, 1_000_000))   # Dwellings
+                .when(F.col("indicator_id") == 'f270', F.col("municipality_value").between(0, 1_000))       # Libraries
+                .when(F.col("indicator_id") == 'f293', F.col("municipality_value").between(0, 1_000))       # Pavilions
+                .when(F.col("indicator_id") == 'f294', F.col("municipality_value").between(0, 1_000))       # Sports Courts
+                .when(F.col("indicator_id") == 'f301', F.col("municipality_value").between(0, 1_000))       # Indoor Pools
+                .otherwise(True) # IMPORTANT: Keep all rows for indicators that don't have a specific rule
             )
 
-            count_after_value_checks = df_filtered.count()
-            print(f"Rows after value range checks: {count_after_value_checks} (Removed: {count_after_year_check - count_after_value_checks})")
+            count_after_value_checks = df_validated.count()
+            rows_removed = count_before_value_checks - count_after_value_checks
+            print(f"Rows after all value range checks: {count_after_value_checks} (Removed: {rows_removed})")
+
 
             # 3. Deduplication (Based on logical primary key for this long table)
             key_columns = ["municipality_id", "indicator_id", "reference_year"]
