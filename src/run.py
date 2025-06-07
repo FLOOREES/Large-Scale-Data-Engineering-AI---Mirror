@@ -2,12 +2,16 @@
 
 from spark_session import get_spark_session
 from setup import make_folder_structure
+import geo_relations
 
 from pipeline import Pipeline
 
 if __name__ == "__main__":
 	make_folder_structure()
 	spark = get_spark_session()
+
+	# Generate geographic relations
+	geo_relations.main()
 
 	# Stages:
 	# 1. Landing Zone
@@ -16,5 +20,5 @@ if __name__ == "__main__":
 	# 4. Exploitation Zone
 	# 5. Analysis (model, visualizer, or both)
 
-	pipeline = Pipeline(spark=spark, start_stage=5, max_stage=5, analysis="both")
+	pipeline = Pipeline(spark=spark, start_stage=3, max_stage=3, analysis="both")
 	pipeline.run()

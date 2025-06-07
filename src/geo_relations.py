@@ -1,4 +1,4 @@
-# generate_geo_relations_final_v4.py
+# geo_relations.py
 
 import geopandas as gpd
 import pandas as pd
