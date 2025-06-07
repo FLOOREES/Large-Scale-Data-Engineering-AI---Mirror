@@ -26,18 +26,17 @@ class KGExploitationZone:
     """
     Orchestrates the creation of a fully reified and comprehensive Knowledge Graph.
     This version ensures all trusted data is represented, including imputed rent,
-    and models Idescat indicators as individual observation nodes.
+    and all RFDBC indicators, correctly modeling them within the AnnualDataPoint nodes.
     """
 
     def __init__(self, spark: SparkSession):
         self.spark = spark
         self.graph = self._initialize_graph()
-        # This map is the single source of truth for indicator names.
-        # It's crucial for creating readable URIs and labels.
         self.indicator_map = self._define_indicator_map()
-        print("Knowledge Graph Exploitation Zone Initialized (Definitive Model).")
+        print("Knowledge Graph Exploitation Zone Initialized.")
 
     def _initialize_graph(self) -> Graph:
+        """Initializes an RDFLib Graph and binds common prefixes."""
         g = Graph()
         g.bind("proj", PROJ)
         g.bind("rdf", RDF)
@@ -80,18 +79,14 @@ class KGExploitationZone:
         """Processes and transforms Spark DataFrames to prepare for triple generation."""
         print("\n--- Step 2: Processing Spark DataFrames ---")
         
-        print("Processing Lloguer data (imputing rent and aggregating)...")
+        print("Processing Lloguer data...")
         df_lloguer_imputed = data['lloguer'].filter(F.col("ambit_territorial") == "Municipi").withColumn(
             "renda_imputed",
             F.when(F.col("renda").isNotNull(), F.col("renda"))
-             .when(F.col("tram_preus") == "<= 350 euros/mes", 325.0)
-             .when(F.col("tram_preus") == "> 350 i <= 450 euros/mes", 400.0)
-             .when(F.col("tram_preus") == "> 350 i <= 500 euros/mes", 425.0)
-             .when(F.col("tram_preus") == "> 450 i <= 600 euros/mes", 525.0)
-             .when(F.col("tram_preus") == "> 500 i <= 650 euros/mes", 575.0)
-             .when(F.col("tram_preus") == "> 600 euros/mes", 800.0)
-             .when(F.col("tram_preus") == "> 650 euros/mes", 900.0)
-             .otherwise(None)
+             .when(F.col("tram_preus") == "<= 350 euros/mes", 325.0).when(F.col("tram_preus") == "> 350 i <= 450 euros/mes", 400.0)
+             .when(F.col("tram_preus") == "> 350 i <= 500 euros/mes", 425.0).when(F.col("tram_preus") == "> 450 i <= 600 euros/mes", 525.0)
+             .when(F.col("tram_preus") == "> 500 i <= 650 euros/mes", 575.0).when(F.col("tram_preus") == "> 600 euros/mes", 800.0)
+             .when(F.col("tram_preus") == "> 650 euros/mes", 900.0).otherwise(None)
         )
         df_lloguer_annual = df_lloguer_imputed.groupBy("codi_territorial", "any").agg(
             F.sum("habitatges").alias("total_contracts"),
@@ -99,22 +94,22 @@ class KGExploitationZone:
         ).withColumnRenamed("codi_territorial", "municipality_id")
         
         print("Processing RFDBC data...")
-        df_rfdbc_annual = data['rfdbc'].filter(F.col("indicator_code") == "PER_CAPITA_EUR").select(
-            F.col("municipality_id"),
-            F.col("year").cast("integer").alias("any"),
-            F.col("value").alias("household_income")
-        )
+        df_rfdbc_pivoted = data['rfdbc'].groupBy("municipality_id", "year").pivot("indicator_code").agg(
+            F.first("value")
+        ).withColumnRenamed("year", "any")
+        
+        df_rfdbc_pivoted = df_rfdbc_pivoted.withColumnRenamed("PER_CAPITA_EUR", "income_per_capita") \
+                                          .withColumnRenamed("PER_CAPITA_INDEX", "income_index_cat_100") \
+                                          .withColumnRenamed("VALUE_EK", "income_total_thousands_eur")
 
-        print("Joining annual Lloguer and RFDBC data...")
+        print("Joining annual Lloguer and all RFDBC data...")
         df_annual_data = df_lloguer_annual.join(
-            df_rfdbc_annual,
+            df_rfdbc_pivoted,
             ["municipality_id", "any"],
             "full_outer"
         ).filter(
             F.col("municipality_id").isNotNull() & F.col("any").isNotNull()
         )
-        
-        print("Idescat data will be used in its 'long' format for reification.")
         
         return {
             "idescat_data": data['idescat'],
@@ -124,7 +119,7 @@ class KGExploitationZone:
 
     def _populate_graph(self, processed_data: dict):
         """Iterates over data to generate and add fully reified RDF triples to the graph."""
-        print("\n--- Pas 3: Populating the Knowledge Graph (Reified Model) ---")
+        print("\n--- Step 3: Populating the Knowledge Graph (Reified Model) ---")
 
         idescat_df = processed_data['idescat_data']
         annual_df = processed_data['annual_data']
@@ -134,7 +129,6 @@ class KGExploitationZone:
         
         created_nodes = set()
 
-        # 1. Create structural nodes (Municipality, Comarca, Province) and relationships
         print("Generating structural nodes and relationships...")
         geo_structure_df = idescat_df.select("municipality_id", "municipality_name", "comarca_name").distinct()
         for row in tqdm(geo_structure_df.collect(), desc="Creating Geo Entities"):
@@ -170,17 +164,14 @@ class KGExploitationZone:
             for neighbor_name in data['neighbors']:
                 self.graph.add((PROJ[f"comarca/{com_name.replace(' ', '_')}"], PROJ.isAdjacentTo, PROJ[f"comarca/{neighbor_name.replace(' ', '_')}"]))
 
-        # 2. Create nodes for each Idescat indicator concept
         print("Generating nodes for Idescat indicator concepts...")
         for indicator_name in self.indicator_map.values():
             indicator_uri = PROJ[f"indicator/{indicator_name}"]
             if indicator_uri not in created_nodes:
-                # The node represents the concept of the indicator
                 self.graph.add((indicator_uri, RDF.type, PROJ.StatisticalIndicator))
                 self.graph.add((indicator_uri, RDFS.label, Literal(indicator_name)))
                 created_nodes.add(indicator_uri)
 
-        # 3. Create Idescat observations as reified nodes
         print("Generating Idescat latest-value observations...")
         window_spec = Window.partitionBy("municipality_id", "indicator_id").orderBy(F.col("reference_year").desc())
         idescat_latest_df = idescat_df.withColumn("rank", F.row_number().over(window_spec)).filter(F.col("rank") == 1).drop("rank")
@@ -192,23 +183,18 @@ class KGExploitationZone:
             indicator_name = self.indicator_map.get(indicator_id)
             if not indicator_name: continue
 
-            # Create a unique URI for this specific observation (fact)
             obs_uri = PROJ[f"observation/{mun_id}_{indicator_name}"]
             mun_uri = PROJ[f"municipality/{mun_id}"]
             indicator_uri = PROJ[f"indicator/{indicator_name}"]
 
-            # Add triples for the observation node
             self.graph.add((obs_uri, RDF.type, PROJ.IndicatorObservation))
             self.graph.add((obs_uri, RDFS.label, Literal(f"{indicator_name}_{mun_id}")))
             self.graph.add((obs_uri, PROJ.hasValue, Literal(value, datatype=XSD.double)))
             self.graph.add((obs_uri, PROJ.referenceYear, Literal(ref_year, datatype=XSD.gYear)))
-            
-            # Link the municipality to this observation and the observation to the indicator concept
             self.graph.add((mun_uri, PROJ.hasObservation, obs_uri))
             self.graph.add((obs_uri, PROJ.isAbout, indicator_uri))
 
-        # 4. Create AnnualDataPoint nodes for rent and income
-        print("Generating AnnualDataPoint nodes for rent and income...")
+        print("Generating AnnualDataPoint nodes with all annual data...")
         for row in tqdm(annual_df.toLocalIterator(), desc="Creating Annual Data Points"):
             mun_id = row['municipality_id']
             year = row['any']
@@ -219,13 +205,19 @@ class KGExploitationZone:
             self.graph.add((datapoint_uri, RDF.type, PROJ.AnnualDataPoint))
             self.graph.add((mun_uri, PROJ.hasAnnualData, datapoint_uri))
             
-            # Add properties only if they exist
+            # Re-added the referenceYear property to the AnnualDataPoint
+            self.graph.add((datapoint_uri, PROJ.referenceYear, Literal(int(year), datatype=XSD.gYear)))
+            
             if row['avg_monthly_rent'] is not None and pd.notna(row['avg_monthly_rent']):
                 self.graph.add((datapoint_uri, PROJ.avgMonthlyRent, Literal(row['avg_monthly_rent'], datatype=XSD.double)))
             if row['total_contracts'] is not None and pd.notna(row['total_contracts']):
                 self.graph.add((datapoint_uri, PROJ.totalContracts, Literal(row['total_contracts'], datatype=XSD.integer)))
-            if row['household_income'] is not None and pd.notna(row['household_income']):
-                self.graph.add((datapoint_uri, PROJ.householdIncome, Literal(row['household_income'], datatype=XSD.double)))
+            if row['income_per_capita'] is not None and pd.notna(row['income_per_capita']):
+                self.graph.add((datapoint_uri, PROJ.incomePerCapita, Literal(row['income_per_capita'], datatype=XSD.double)))
+            if row['income_index_cat_100'] is not None and pd.notna(row['income_index_cat_100']):
+                self.graph.add((datapoint_uri, PROJ.incomeIndex, Literal(row['income_index_cat_100'], datatype=XSD.double)))
+            if row['income_total_thousands_eur'] is not None and pd.notna(row['income_total_thousands_eur']):
+                self.graph.add((datapoint_uri, PROJ.incomeTotal, Literal(row['income_total_thousands_eur'], datatype=XSD.double)))
 
     def run(self):
         """Executes the full Exploitation Zone pipeline."""
