@@ -199,7 +199,7 @@ class KGExploitationZone:
 
             # Add triples for the observation node
             self.graph.add((obs_uri, RDF.type, PROJ.IndicatorObservation))
-            self.graph.add((obs_uri, RDFS.label, Literal(f"Observation of {indicator_name} for {mun_id}")))
+            self.graph.add((obs_uri, RDFS.label, Literal(f"{indicator_name}_{mun_id}")))
             self.graph.add((obs_uri, PROJ.hasValue, Literal(value, datatype=XSD.double)))
             self.graph.add((obs_uri, PROJ.referenceYear, Literal(ref_year, datatype=XSD.gYear)))
             
