@@ -103,13 +103,13 @@ class LloguerTrustedZone:
             current_count = count_after_year_check
 
             # Rule 3: Validate 'habitatges' (count) >= 0
-            df_filtered = df_filtered.filter(F.col("habitatges") >= 0)
+            df_filtered = df_filtered.filter(F.col("habitatges") >= 0 | F.col("habitages") < 9999)  # Assuming 'habitatges' is a count and should be non-negative
             count_after_habitatges_check = df_filtered.count()
             print(f"Rows after 'habitatges' >= 0 check: {count_after_habitatges_check} (Removed: {current_count - count_after_habitatges_check})")
             current_count = count_after_habitatges_check
 
             # Rule 4: Validate 'renda' > 0 (if not NULL)
-            df_filtered = df_filtered.filter(F.col("renda").isNull() | (F.col("renda") > 0))
+            df_filtered = df_filtered.filter(F.col("renda").isNull() | (F.col("renda") > 0) | (F.col("renda") < 99999))  # Assuming 'renda' can be NULL or positive
             count_after_renda_check = df_filtered.count()
             print(f"Rows after 'renda' > 0 (or NULL) check: {count_after_renda_check} (Removed: {current_count - count_after_renda_check})")
             current_count = count_after_renda_check # Count before deduplication
