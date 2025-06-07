@@ -6,8 +6,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
-import os
-import json
 from typing import List, Dict, Any
 
 # PyKEEN imports
@@ -35,7 +33,7 @@ class KGEmbeddings:
     embedding models with different hyperparameters using PyKEEN.
     """
 
-    def __init__(self, model_configs: List[Dict[str, Any]], graph_path: Path = GRAPH_PATH, epochs: int = 100, batch_size: int = 256, force_training: bool = False):
+    def __init__(self, model_configs: List[Dict[str, Any]], graph_path: Path = GRAPH_PATH, epochs: int = 100, batch_size: int = 256, force_training: bool = False, create_plots_in_run: bool = True):
         if not isinstance(model_configs, list) or not model_configs:
             raise ValueError("model_configs must be a non-empty list of dictionaries.")
 
@@ -44,6 +42,7 @@ class KGEmbeddings:
         self.epochs = epochs
         self.batch_size = batch_size
         self.force_training = force_training
+        self.create_plots_in_run = create_plots_in_run
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
         self.run_output_dir = OUTPUT_DIR / "comparison_run"
@@ -120,6 +119,9 @@ class KGEmbeddings:
                 all_results[experiment_id] = result
             except Exception as e:
                 logger.error(f"Failed to run pipeline for '{experiment_id}'.", exc_info=True)
+
+        if self.create_plots_in_run:
+            self.compare_and_plot_results(all_results)
         
         return all_results
     
