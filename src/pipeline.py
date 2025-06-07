@@ -13,11 +13,14 @@ class Pipeline:
 	"""
 	Main class to orchestrate the data pipeline.
 	"""
-	def __init__(self, spark: SparkSession, max_stage: int = 5, analysis: str = "both"):
-		assert max_stage in [1, 2, 3, 4, 5], "max_stage must be between 1 and 4"
+	def __init__(self, spark: SparkSession, start_stage: int = 1, max_stage: int = 5, analysis: str = "both"):
+		assert start_stage in [1, 2, 3, 4, 5], "start_stage must be between 1 and 5"
+		assert max_stage in [1, 2, 3, 4, 5], "max_stage must be between 1 and 5"
+		assert start_stage <= max_stage, "start_stage cannot be greater than max_stage"
 		assert analysis in ["model", "visualizer", "both"], "analysis must be either 'model' or 'visualizer' or 'both'"
 
 		self.analysis = analysis
+		self.start_stage = start_stage
 		self.max_stage = max_stage
 		self.spark = spark
 		self.landing = LandingZone() # No spark is used in landing zone
@@ -28,29 +31,33 @@ class Pipeline:
 		self.model = Model(spark=self.spark)
 
 	def run(self):
-		print("-"*100)
-		print("\n\nPIPELINE: STARTING LANDING ZONE\n\n")
-		print("-"*100)
-		self.landing.run()
-		if self.max_stage >= 2:
+		if self.start_stage <= 1 <= self.max_stage:
 			print("-"*100)
-			print("\n\nPIPELINE: STARTING FORMATTED ZONE\n\n")
+			print("\n\nPIPELINE: STARTING LANDING ZONE (STAGE 1)\n\n")
+			print("-"*100)
+			self.landing.run()
+		
+		if self.start_stage <= 2 <= self.max_stage:
+			print("-"*100)
+			print("\n\nPIPELINE: STARTING FORMATTED ZONE (STAGE 2)\n\n")
 			print("-"*100)
 			self.formatted.run()
-		if self.max_stage >= 3:
+		
+		if self.start_stage <= 3 <= self.max_stage:
 			print("-"*100)
-			print("\n\nPIPELINE: STARTING TRUSTED ZONE\n\n")
+			print("\n\nPIPELINE: STARTING TRUSTED ZONE (STAGE 3)\n\n")
 			print("-"*100)
 			self.trusted.run()
-		if self.max_stage >= 4:
+		
+		if self.start_stage <= 4 <= self.max_stage:
 			print("-"*100)
-			print("\n\nPIPELINE: STARTING EXPLOITATION ZONE\n\n")
+			print("\n\nPIPELINE: STARTING EXPLOITATION ZONE (STAGE 4)\n\n")
 			print("-"*100)
 			self.exploitation.run()
 
-		if self.max_stage >= 5:
+		if self.start_stage <= 5 <= self.max_stage:
 			print("-"*100)
-			print(f"\n\nPIPELINE: STARTING ANALYSIS ({self.analysis})\n\n")
+			print(f"\n\nPIPELINE: STARTING ANALYSIS (STAGE 5) ({self.analysis})\n\n")
 			print("-"*100)
 			if self.analysis == "both":
 				self.visualizer.run()
