@@ -20,5 +20,5 @@ if __name__ == "__main__":
 	# 4. Exploitation Zone
 	# 5. Analysis (model, visualizer, or both)
 
-	pipeline = Pipeline(spark=spark, start_stage=3, max_stage=3, analysis="both")
+	pipeline = Pipeline(spark=spark, start_stage=4, max_stage=4, analysis="both")
 	pipeline.run()
