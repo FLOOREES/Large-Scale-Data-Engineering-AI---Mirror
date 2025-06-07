@@ -1,14 +1,14 @@
-# exploitation_zone_kg.py
+# exploitation_zone_kg_v2.py
 
 import json
 from pathlib import Path
 import traceback
-import pandas as pd
 from tqdm import tqdm
+import pandas as pd
 
-# --- Imports de RDFLib (AMB LA CORRECCIÓ) ---
+# --- Imports de RDFLib ---
 from rdflib import Graph, URIRef, Literal, Namespace
-from rdflib.namespace import RDF, RDFS, XSD # Importa els namespaces directament
+from rdflib.namespace import RDF, RDFS, XSD
 
 # --- Imports de PySpark ---
 from pyspark.sql import SparkSession, DataFrame
@@ -16,15 +16,10 @@ from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
 # --- Configuració ---
-# Defineix el teu Namespace personalitzat
 PROJ = Namespace("http://example.com/catalonia-ontology/")
-
-# Camins a les dades d'entrada
 TRUSTED_DIR = Path("./data/trusted/")
 RELATIONS_DIR = Path("./data/relations/")
 EXPLOITATION_DIR = Path("./data/exploitation/")
-
-# Assegura't que el directori de sortida existeix
 EXPLOITATION_DIR.mkdir(parents=True, exist_ok=True)
 
 class KGExploitationZone:
@@ -39,7 +34,6 @@ class KGExploitationZone:
         print("Knowledge Graph Exploitation Zone Initialized.")
 
     def _initialize_graph(self) -> Graph:
-        """Inicialitza un graf RDFLib i l'enllaça amb els prefixos estàndard i personalitzats."""
         g = Graph()
         g.bind("proj", PROJ)
         g.bind("rdf", RDF)
@@ -48,7 +42,6 @@ class KGExploitationZone:
         return g
 
     def _load_data(self) -> dict:
-        """Llegeix totes les fonts de dades necessàries (Delta i JSON)."""
         print("\n--- Pas 1: Carregant totes les fonts de dades ---")
         data = {}
         try:
@@ -70,12 +63,15 @@ class KGExploitationZone:
             raise
 
     def _process_data_for_kg(self, data: dict) -> dict:
-        """Processa i transforma els DataFrames de Spark per preparar-los per a la generació de triples."""
         print("\n--- Pas 2: Processant DataFrames de Spark ---")
         
         print("Processant Idescat: trobant l'últim valor per indicador i fent pivot...")
         window_spec = Window.partitionBy("municipality_id", "indicator_id").orderBy(F.col("reference_year").desc())
-        df_idescat_latest = data['idescat'].withColumn("rank", F.row_number().over(window_spec)).filter(F.col("rank") == 1).drop("rank")
+        df_idescat_latest = data['idescat'].withColumn("rank", F.row_number().over(window_spec)).filter(F.col("rank") == 1).drop("rank", "reference_year")
+        
+        # Guardem una versió no pivotada per als anys de referència
+        df_idescat_ref_years = data['idescat'].withColumn("rank", F.row_number().over(window_spec)).filter(F.col("rank") == 1).select("municipality_id", "indicator_id", "reference_year")
+
         df_idescat_pivoted = df_idescat_latest.groupBy("municipality_id", "municipality_name", "comarca_name").pivot("indicator_id").agg(F.first("municipality_value"))
         
         print("Processant Lloguer: agregant anualment...")
@@ -101,6 +97,7 @@ class KGExploitationZone:
         return {
             "static_data": df_idescat_pivoted,
             "annual_data": df_annual_data,
+            "ref_years": df_idescat_ref_years, # Afegim els anys de referència
             **{k: v for k, v in data.items() if k not in ['idescat', 'lloguer', 'rfdbc']}
         }
 
@@ -110,33 +107,37 @@ class KGExploitationZone:
 
         static_df = processed_data['static_data']
         annual_df = processed_data['annual_data']
+        ref_years_df = processed_data['ref_years']
         mun_neighbors = processed_data['mun_neighbors']
         com_neighbors = processed_data['com_neighbors']
         com_to_prov = processed_data['com_to_prov']
         
         created_nodes = set()
 
+        # Convertim el DataFrame de ref_years a un diccionari per a una cerca ràpida
+        ref_years_map = {(row.municipality_id, row.indicator_id): row.reference_year for row in ref_years_df.collect()}
+        
         print("Generant nodes estàtics (Municipis, Comarques, Províncies) i les seves propietats...")
         static_data_local = static_df.collect()
 
         for row in tqdm(static_data_local, desc="Creant Nodes Estàtics"):
             mun_id = row['municipality_id']
+            mun_name = row['municipality_name']
             com_name = row['comarca_name']
             
             if not mun_id or not com_name: continue
 
             mun_uri = PROJ[f"municipality/{mun_id}"]
             com_uri = PROJ[f"comarca/{com_name.replace(' ', '_')}"]
-            prov_name = com_to_prov.get(com_name)
             
             if mun_uri not in created_nodes:
                 self.graph.add((mun_uri, RDF.type, PROJ.Municipality))
-                # Aquí s'utilitza RDFS (importat en majúscules)
-                self.graph.add((mun_uri, RDFS.label, Literal(row['municipality_name'], lang='ca')))
+                self.graph.add((mun_uri, RDFS.label, Literal(mun_name, lang='ca')))
                 self.graph.add((mun_uri, PROJ.isInComarca, com_uri))
                 created_nodes.add(mun_uri)
 
             if com_uri not in created_nodes:
+                prov_name = com_to_prov.get(com_name)
                 self.graph.add((com_uri, RDF.type, PROJ.Comarca))
                 self.graph.add((com_uri, RDFS.label, Literal(com_name, lang='ca')))
                 if prov_name:
@@ -148,11 +149,20 @@ class KGExploitationZone:
                         created_nodes.add(prov_uri)
                 created_nodes.add(com_uri)
 
-            for col_name in static_df.columns:
-                if col_name.startswith('f') and row[col_name] is not None:
-                    prop_uri = PROJ[col_name]
-                    # Aquí s'utilitza XSD (importat en majúscules)
-                    self.graph.add((mun_uri, prop_uri, Literal(row[col_name], datatype=XSD.double)))
+            # Afegir triples per a cada indicador d'Idescat com a propietat estàtica
+            for indicator_id in static_df.columns:
+                if indicator_id.startswith('f') and row[indicator_id] is not None:
+                    prop_name = f"latest_{indicator_id}" # Nom de propietat més descriptiu
+                    prop_uri = PROJ[prop_name]
+                    value = row[indicator_id]
+                    self.graph.add((mun_uri, prop_uri, Literal(value, datatype=XSD.double)))
+                    
+                    # AFEGIM L'ANY DE REFERÈNCIA
+                    ref_year = ref_years_map.get((mun_id, indicator_id))
+                    if ref_year:
+                        ref_year_prop_uri = PROJ[f"{prop_name}_refYear"]
+                        self.graph.add((mun_uri, ref_year_prop_uri, Literal(ref_year, datatype=XSD.gYear)))
+
 
         print("Generant relacions de veïnatge...")
         for mun_id, data in mun_neighbors.items():
@@ -176,19 +186,21 @@ class KGExploitationZone:
             if not mun_id or not year: continue
             
             mun_uri = PROJ[f"municipality/{mun_id}"]
+            # URI i Label més descriptius per a l'AnnualDataPoint
             datapoint_uri = PROJ[f"datapoint/{mun_id}_{year}"]
             
             self.graph.add((datapoint_uri, RDF.type, PROJ.AnnualDataPoint))
+            self.graph.add((datapoint_uri, RDFS.label, Literal(f"Data for {mun_id} in {year}")))
             self.graph.add((mun_uri, PROJ.hasAnnualData, datapoint_uri))
             self.graph.add((datapoint_uri, PROJ.referenceYear, Literal(year, datatype=XSD.gYear)))
             
-            if row['avg_monthly_rent'] is not None:
+            # Afegir dades només si no són null
+            if pd.notna(row['avg_monthly_rent']):
                 self.graph.add((datapoint_uri, PROJ.avgMonthlyRent, Literal(row['avg_monthly_rent'], datatype=XSD.double)))
-            if row['household_income'] is not None:
+            if pd.notna(row['household_income']):
                 self.graph.add((datapoint_uri, PROJ.householdIncome, Literal(row['household_income'], datatype=XSD.double)))
 
     def run(self):
-        """Executa el pipeline complet de la Zona d'Explotació."""
         try:
             raw_data = self._load_data()
             processed_data = self._process_data_for_kg(raw_data)
@@ -199,18 +211,14 @@ class KGExploitationZone:
             self.graph.serialize(destination=str(output_file), format='turtle')
             print(f"Graf desat amb èxit. Conté {len(self.graph)} triples.")
             print("\n--- Exploitation Zone (KG) Task Successfully Completed ---")
-
         except Exception as e:
             print(f"!!! ERROR durant l'execució de la Zona d'Explotació: {e}")
             traceback.print_exc()
 
-# --- Funció per inicialitzar Spark (la que has proporcionat) ---
-DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0" # Aquesta versió pot variar
-
+# La funció get_spark_session roman igual
 def get_spark_session() -> SparkSession:
-    """
-    Initializes and returns a SparkSession configured for Delta Lake.
-    """
+    # ... (copiar la funció que ja tens) ...
+    DELTA_PACKAGE = "io.delta:delta-spark_2.12:3.3.0"
     print("Initializing Spark Session...")
     try:
         spark = SparkSession.builder \
@@ -219,19 +227,14 @@ def get_spark_session() -> SparkSession:
             .config("spark.jars.packages", DELTA_PACKAGE) \
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-            .config("spark.sql.parquet.int96AsTimestamp", "true") \
-            .config("spark.sql.parquet.datetimeRebaseModeInRead", "CORRECTED") \
-            .config("spark.sql.parquet.int96RebaseModeInRead", "CORRECTED") \
             .getOrCreate()
-
-        spark.sparkContext.setLogLevel("ERROR") # Redueix la verbositat
+        spark.sparkContext.setLogLevel("ERROR")
         print("Spark Session Initialized. Log level set to ERROR.")
         return spark
     except Exception as e:
         print(f"FATAL: Error initializing Spark Session: {e}")
         raise
 
-# --- Bloc Principal d'Execució ---
 if __name__ == "__main__":
     spark_session = None
     try:
