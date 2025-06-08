@@ -61,32 +61,32 @@ if __name__ == "__main__":
 					}
 				"""
 			},
-			{
-				'name': "Complex: Girona Province Neighbors of Populous Towns with Cheap Rent",
-				'sparql': """
-					PREFIX proj: <http://example.com/catalonia-ontology/>
-					PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-					PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-					SELECT DISTINCT ?municipality_name ?avg_rent ?neighbor_name ?neighbor_population
-					WHERE {
-					  ?province rdfs:label "Girona"@ca .
-					  ?comarca proj:isInProvince ?province .
-					  ?mun proj:isInComarca ?comarca ;
-						   rdfs:label ?municipality_name .
-					  ?mun proj:isNeighborOf ?neighbor_mun .
-					  ?neighbor_mun rdfs:label ?neighbor_name .
-					  ?neighbor_mun proj:hasObservation ?pop_obs .
-					  ?pop_obs proj:field <http://example.com/catalonia-ontology/indicator/population> ;
-							   proj:value ?neighbor_population .
-					  FILTER(?neighbor_population > 20000)
-					  ?mun proj:hasAnnualData ?data_point .
-					  ?data_point proj:referenceYear "2021"^^xsd:gYear ;
-								  proj:avgMonthlyRent ?avg_rent .
-					  FILTER(?avg_rent < 700)
-					}
-					ORDER BY ?municipality_name
-				"""
-			}
+			# {
+			# 	'name': "Complex: Girona Province Neighbors of Populous Towns with Cheap Rent",
+			# 	'sparql': """
+			# 		PREFIX proj: <http://example.com/catalonia-ontology/>
+			# 		PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+			# 		PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+			# 		SELECT DISTINCT ?municipality_name ?avg_rent ?neighbor_name ?neighbor_population
+			# 		WHERE {
+			# 		  ?province rdfs:label "Girona"@ca .
+			# 		  ?comarca proj:isInProvince ?province .
+			# 		  ?mun proj:isInComarca ?comarca ;
+			# 			   rdfs:label ?municipality_name .
+			# 		  ?mun proj:isNeighborOf ?neighbor_mun .
+			# 		  ?neighbor_mun rdfs:label ?neighbor_name .
+			# 		  ?neighbor_mun proj:hasObservation ?pop_obs .
+			# 		  ?pop_obs proj:field <http://example.com/catalonia-ontology/indicator/population> ;
+			# 				   proj:value ?neighbor_population .
+			# 		  FILTER(?neighbor_population > 20000)
+			# 		  ?mun proj:hasAnnualData ?data_point .
+			# 		  ?data_point proj:referenceYear "2021"^^xsd:gYear ;
+			# 					  proj:avgMonthlyRent ?avg_rent .
+			# 		  FILTER(?avg_rent < 700)
+			# 		}
+			# 		ORDER BY ?municipality_name
+			# 	"""
+			# }
 		]
 	}
 
@@ -109,7 +109,7 @@ if __name__ == "__main__":
 			{'name': 'TransH', 'dim': 128},
 		],
 		'epochs': 300, # High because early stopping is implemented
-		'batch_size': 512,
+		'batch_size': 64,
 		'force_training': False, # Set to True to retrain all models
 	}
 

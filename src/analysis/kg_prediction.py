@@ -160,9 +160,9 @@ class RentPredictionPipeline:
         val_df = train_val_df[train_val_df[self.time_col] == val_year].copy()
         train_df = train_val_df[train_val_df[self.time_col] < val_year].copy()
         
-        self.X_train, self.y_train = train_df[self.features], train_df[self.target_variable]
-        self.X_val, self.y_val = val_df[self.features], val_df[self.target_variable]
-        self.X_test, self.y_test = test_df[self.features], test_df[self.target_variable]
+        self.X_train, self.y_train = train_df[self.features].copy(), train_df[self.target_variable].copy()
+        self.X_val, self.y_val = val_df[self.features].copy(), val_df[self.target_variable].copy()
+        self.X_test, self.y_test = test_df[self.features].copy(), test_df[self.target_variable].copy()
 
         logger.info(f"Data split complete: Train={self.X_train.shape}, Val={self.X_val.shape}, Test={self.X_test.shape}")
 
@@ -180,7 +180,6 @@ class RentPredictionPipeline:
         numeric_cols_to_scale = self.X_train.select_dtypes(include=np.number).columns.tolist()
         self.scaler = StandardScaler()
         
-        # **FIXED**: Assign scaled values directly to prevent FutureWarning and printing
         self.X_train[numeric_cols_to_scale] = self.scaler.fit_transform(self.X_train[numeric_cols_to_scale])
         self.X_val[numeric_cols_to_scale] = self.scaler.transform(self.X_val[numeric_cols_to_scale])
         self.X_test[numeric_cols_to_scale] = self.scaler.transform(self.X_test[numeric_cols_to_scale])
