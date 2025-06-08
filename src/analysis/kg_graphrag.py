@@ -157,7 +157,7 @@ Answer:"""
 
     # --- Public Interface ---
 
-    def ask(self, question: str) -> str:
+    def run(self, question: str) -> str:
         """Asks a question to the RAG pipeline."""
         print(f"\n> Executing query for question: '{question}'")
         result = self.chain.invoke({"question": question})
@@ -193,7 +193,7 @@ if __name__ == "__main__":
         ]
 
         for q in questions_to_ask:
-            answer = rag_pipeline.ask(q)
+            answer = rag_pipeline.run(q)
             print("\n< Answer:")
             print(answer)
             print("-" * 40)

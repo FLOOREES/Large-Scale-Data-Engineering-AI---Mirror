@@ -27,7 +27,7 @@ class KGQueryPipeline:
         print(f"Graph loaded successfully! It contains {len(g)} facts (triples).")
         return g
 
-    def run_query(self, sparql_query: str) -> pd.DataFrame:
+    def run(self, sparql_query: str) -> pd.DataFrame:
         """
         Executes a SPARQL query and returns the results in a Pandas DataFrame.
         """
@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     try:
         query_pipeline = KGQueryPipeline(graph_path=graph_file)
-        results_df = query_pipeline.run_query(sparql_query=query)
+        results_df = query_pipeline.run(sparql_query=query)
 
         print("\n--- Query Results ---")
         if results_df.empty:

@@ -44,7 +44,7 @@ if __name__ == "__main__":
         query_pipeline = KGQueryPipeline(graph_path=graph_file)
 
         print(f"\n{'='*10} Executing Complex Query {'='*10}")
-        results_df = query_pipeline.run_query(sparql_query=complex_query)
+        results_df = query_pipeline.run(sparql_query=complex_query)
 
         print("\n--- Query Results ---")
         if results_df.empty:
