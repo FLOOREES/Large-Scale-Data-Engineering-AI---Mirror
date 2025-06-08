@@ -1,7 +1,7 @@
-# large-scale-data-engineering-ai
-
 All requirements can be found in the requirements.txt file. The Python version used is 3.10.12.
 
-DATA is not included in the deliverable because then the ZIP file is larger than the 20MB limit of LearnSQL. To generate it, the pipeline should be run (src.run.py).
+The entire project, from data ingestion to the final AI-driven analyses, is orchestrated through a single entry point: the run.py script located in the project's source directory. The pipeline is designed for modularity and flexibility, allowing an operator to execute the full end-to-end workflow or to target specific segments by configuring the starting stage (e.g., beginning directly at the Trusted or Exploitation Zone, or just running some of the analysis pipelines instead of all of them). This enables efficient testing and demonstration of individual components.
 
-MODELS are not included in the deliverable because then the ZIP file is larger than the 20MB limit of LearnSQL. To generate them, the pipeline should be run (src.run.py) making sure that the pipeline of the models is run (option "both" or "model" in the analysis paremeter in run.py).
+To facilitate a quick and comprehensive evaluation, several artifacts are included in the delivery. A complete sample of the console output from a full execution is available in the output.txt file at the project's root, providing a clear reference for the expected results. To bypass the most time-intensive process, the pre-trained Knowledge Graph Embedding models are also provided, allowing the analysis pipelines to be run without retraining. Similarly, for the GraphRAG pipeline, the required OPENAI_API_KEY is pre-configured in the project's environment (.env) to ensure all components are fully and immediately executable without external setup.
+
+However, the data of the different zones is not included, so a full pipeline execution should be done in order to create all the parquet files and data to run the analysis pipelines.
