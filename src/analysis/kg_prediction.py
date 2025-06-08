@@ -190,25 +190,65 @@ class RentPredictionPipeline:
         logger.info("Numeric features scaled and scaler saved.")
 
     def _train_model(self):
+        """
+        Trains the LightGBM model. First, it uses a validation set for early
+        stopping to find the optimal number of boosting rounds. Then, it
+        retrains a new model on the full training + validation data for that
+        optimal number of rounds.
+        """
         logger.info("--- Step 4: Training LightGBM Model ---")
+        
+        # --- Define Parameters ---
         params = {
             'objective': 'regression_l1', 'metric': 'mae', 'n_estimators': 2000,
             'learning_rate': 0.02, 'feature_fraction': 0.8, 'bagging_fraction': 0.8,
             'bagging_freq': 1, 'num_leaves': 31, 'verbose': -1, 'n_jobs': -1, 'seed': 42
         }
 
-        self.model = lgb.LGBMRegressor(**params)
+        # --- Part A: Find the optimal number of iterations ---
+        logger.info("Step 4a: Finding best iteration using validation set...")
         
-        logger.info("Training with early stopping...")
-        self.model.fit(
+        temp_model = lgb.LGBMRegressor(**params)
+        
+        temp_model.fit(
             self.X_train, self.y_train,
             eval_set=[(self.X_val, self.y_val)],
             eval_metric='mae',
             callbacks=[lgb.early_stopping(100, verbose=True)]
         )
         
-        logger.info(f"Best iteration found: {self.model.best_iteration_}")
+        best_iteration = temp_model.best_iteration_
+        if best_iteration is None:
+            logger.warning("Early stopping did not trigger. Using default n_estimators.")
+            best_iteration = params['n_estimators']
         
+        logger.info(f"Optimal number of iterations found: {best_iteration}")
+
+        # --- Part B: Re-train a new model on the combined data ---
+        logger.info("Step 4b: Retraining final model on combined train+validation data...")
+        
+        # Combine the original training and validation sets
+        X_train_full = pd.concat([self.X_train, self.X_val], ignore_index=True)
+        y_train_full = pd.concat([self.y_train, self.y_val], ignore_index=True)
+
+        # Update params with the optimal number of estimators
+        final_params = params.copy()
+        final_params['n_estimators'] = best_iteration
+
+        self.model = lgb.LGBMRegressor(**final_params)
+        
+        # Handle categoricals for the full training data
+        for col in self.categorical_features:
+            if col in X_train_full.columns:
+                X_train_full[col] = X_train_full[col].astype('category')
+
+        self.model.fit(X_train_full, y_train_full,
+                       categorical_feature=[col for col in self.categorical_features if col in X_train_full.columns]
+                      )
+        
+        logger.info("Final model has been retrained on all available data (excluding test set).")
+        
+        # Save the final retrained model
         joblib.dump(self.model, self.models_dir / 'rent_predictor_lgbm.joblib')
         logger.info(f"Model saved to: {self.models_dir / 'rent_predictor_lgbm.joblib'}")
 
