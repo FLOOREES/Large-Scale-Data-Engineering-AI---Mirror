@@ -1,153 +1,190 @@
-import os
-from pathlib import Path
+# ==============================================================================
+#
+#                            Graph RAG Pipeline
+#
+# ==============================================================================
+#
+# Author: Your Programming Buddy
+# Date: 2024-05-21 (Pure LCEL Version)
+# Description: A professional, modular pipeline built from scratch using modern
+#              LangChain Expression Language (LCEL). This approach offers full
+#              transparency and control, avoiding the complexities of legacy
+#              chains.
+#
+# ==============================================================================
 
-from rdflib import Graph
-from langchain.chains import LLMChain
+
+# --- Imports ---
+import os
+import re
+from pathlib import Path
+from typing import Any, Dict, List
+
+# --- LangChain Core Imports ---
+from langchain_community.graphs import RdfGraph
 from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import Runnable, RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
+
+
+# ==============================================================================
+# --- Utility Function: LLM Output Sanitizer ---
+# ==============================================================================
+
+def _extract_sparql_query(text: str) -> str:
+    """Extracts the SPARQL query from the LLM's raw output."""
+    match = re.search(r"```(sparql\s*)?(.*)```", text, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(2).strip()
+    return text.strip()
+
+
+# ==============================================================================
+# --- Class Definition: GraphRAGPipeline ---
+# ==============================================================================
 
 class GraphRAGPipeline:
     """
-    A professional, modular pipeline for performing GraphRAG.
-
-    This version manually implements the text-to-SPARQL and answer synthesis
-    steps using core LLMChains for maximum reliability and control, bypassing
-    the higher-level GraphSparqlQAChain wrapper.
+    Orchestrates a Retrieval-Augmented Generation (RAG) pipeline over a
+    knowledge graph using SPARQL, built entirely with modern LCEL.
     """
 
-    def __init__(self, config: dict):
-        """Initializes the GraphRAG pipeline with a given configuration."""
-        self.config = config
-        self.graph = self._load_rdflib_graph()
-        self.llm = self._initialize_llm()
-        
-        # We now create two separate, explicit chains.
-        self.sparql_generation_chain = self._create_sparql_generation_chain()
-        self.answer_synthesis_chain = self._create_answer_synthesis_chain()
-        
-        print("GraphRAG Pipeline Initialized Successfully.")
+    def __init__(self, turtle_path: Path, llm_config: Dict[str, Any]):
+        """Initializes the pipeline by loading the graph, LLM, and the QA chain."""
+        print("--- Initializing Graph RAG Pipeline ---")
+        self.graph = self._load_graph(turtle_path)
+        self.llm = self._create_llm(llm_config)
+        self.chain = self._create_rag_chain()
+        print("--- Pipeline Initialized Successfully ---")
 
-    def _load_rdflib_graph(self) -> Graph:
-        """Loads the RDF graph directly into an rdflib.Graph object."""
-        graph_path = self.config["graph_path"]
-        if not graph_path.exists():
-            raise FileNotFoundError(f"Graph file not found at: {graph_path}")
-        
-        print(f"Loading graph from '{graph_path}' into rdflib...")
-        graph = Graph()
-        graph.parse(source=str(graph_path), format="turtle")
-        print(f"Graph loaded successfully with {len(graph)} triples.")
+    # --- Private Helper Methods ---
+
+    def _load_graph(self, turtle_path: Path) -> RdfGraph:
+        """Loads the RDF graph from the specified Turtle file."""
+        if not turtle_path.exists():
+            raise FileNotFoundError(f"Knowledge graph file not found at: {turtle_path}")
+
+        print(f"Loading graph from: {turtle_path}")
+        graph = RdfGraph(source_file=str(turtle_path), standard="rdf")
+        print(f"Graph loaded. Contains {len(graph.graph)} triples.")
         return graph
 
-    def _get_schema(self) -> str:
-        """A simple method to extract a text representation of the graph schema."""
-        query = """
-        SELECT DISTINCT ?class ?predicate ?object
-        WHERE {
-          ?subject a ?class.
-          ?subject ?predicate ?object.
-        } LIMIT 100
-        """
-        # This is a simplified schema extraction. For a production system,
-        # this would be more robust, parsing RDFS/OWL definitions.
-        results = self.graph.query(query)
-        return "\n".join(str(row) for row in results)
+    def _create_llm(self, llm_config: Dict[str, Any]) -> ChatOpenAI:
+        """Initializes the Chat LLM from configuration."""
+        print(f"Creating LLM with config: {llm_config}")
+        return ChatOpenAI(**llm_config)
 
-    def _initialize_llm(self) -> ChatOpenAI:
-        """Initializes the Language Model from the configuration."""
-        if not os.getenv("OPENAI_API_KEY"):
-            raise ValueError("OPENAI_API_KEY environment variable not set.")
-        return ChatOpenAI(
-            temperature=self.config['temperature'],
-            model=self.config['llm_model_name']
+    def _create_rag_chain(self) -> Runnable:
+        """
+        Creates the full RAG chain using LCEL.
+        This involves generating a SPARQL query, executing it, and synthesizing an answer.
+        """
+        print("Creating custom RAG chain with LCEL...")
+
+        # --- 1. SPARQL Generation Chain ---
+        # This chain takes a question and generates a sanitized SPARQL query.
+        sparql_prompt = PromptTemplate(
+            input_variables=["question", "schema"],
+            template="""You are an expert at converting user questions into SPARQL queries.
+Given an input question, create a syntactically correct SPARQL query to run.
+You must use the provided schema to generate the query. Do not add any text outside of the query itself.
+
+Schema:
+{schema}
+
+Question: {question}
+SPARQLQuery:
+""",
         )
 
-    def _create_sparql_generation_chain(self) -> LLMChain:
-        """Creates the chain responsible for generating SPARQL queries."""
-        print("Initializing SPARQL Generation Chain...")
-        prompt_template = """
-        You are an expert SPARQL developer. Your task is to write a SPARQL query to answer a user's question about a knowledge graph.
-        Base the query on the provided graph schema and the question. Return only the SPARQL query code block.
-
-        Graph Schema:
-        {schema}
-
-        Question:
-        {question}
-
-        SPARQL Query:
-        """
-        prompt = PromptTemplate(
-            input_variables=["schema", "question"], template=prompt_template
+        sparql_generation_chain = (
+            RunnablePassthrough.assign(schema=lambda _: self.graph.get_schema)
+            | sparql_prompt
+            | self.llm
+            | StrOutputParser()
+            | _extract_sparql_query
         )
-        return LLMChain(llm=self.llm, prompt=prompt)
 
-    def _create_answer_synthesis_chain(self) -> LLMChain:
-        """Creates the chain responsible for generating the final answer."""
-        print("Initializing Answer Synthesis Chain...")
-        prompt_template = """
-        You are a helpful assistant. Given a user's question and the results of a database query,
-        synthesize a final, human-readable answer based ONLY on the provided context.
+        # --- 2. Full RAG Chain ---
+        # This orchestrates the entire process.
+        qa_prompt = PromptTemplate(
+            input_variables=["question", "context"],
+            template="""You are an assistant that answers user questions based on provided context.
+If the context is empty, say you do not have that information.
+Your answer should be clear, concise, and directly based on the information given.
 
-        Question:
-        {question}
+Context:
+{context}
 
-        Query Results:
-        {query_results}
-
-        Final Answer:
-        """
-        prompt = PromptTemplate(
-            input_variables=["question", "query_results"], template=prompt_template
+Question: {question}
+Answer:
+""",
         )
-        return LLMChain(llm=self.llm, prompt=prompt)
 
-    def run(self, question: str) -> str:
-        """
-        Executes the full RAG pipeline for a given natural language question.
-        """
-        print(f"\n--- Processing Question: '{question}' ---")
-        
-        # Step 1: Generate the SPARQL query.
-        print("Step 1: Generating SPARQL query...")
-        graph_schema = self._get_schema()
-        generated_sparql = self.sparql_generation_chain.run(
-            schema=graph_schema, question=question
+        # We define a function to run the SPARQL query and format the results.
+        def run_sparql_and_get_context(sparql_query: str) -> Dict[str, Any]:
+            print("\n--- Generated SPARQL ---\n", sparql_query)
+            query_results = self.graph.query(sparql_query)
+            return {"context": str([r.asdict() for r in query_results])}
+
+        full_rag_chain = (
+            # The input to this whole chain is a dictionary: {"question": "..."}
+            RunnablePassthrough.assign(sparql_query=sparql_generation_chain)
+            | RunnablePassthrough.assign(
+                # The 'context' is derived from running the 'sparql_query'
+                context=lambda x: run_sparql_and_get_context(x["sparql_query"])["context"]
+            )
+            | qa_prompt
+            | self.llm
+            | StrOutputParser()
         )
-        # Clean up the LLM's output to get only the code.
-        generated_sparql = generated_sparql.strip().replace("```sparql", "").replace("```", "").strip()
-        print(f"Generated SPARQL:\n{generated_sparql}")
 
-        # Step 2: Execute the query against our graph.
-        print("\nStep 2: Executing query against the graph...")
-        try:
-            query_results = self.graph.query(generated_sparql)
-            results_str = "\n".join(str(row.asdict()) for row in query_results)
-            print(f"Query returned {len(query_results)} results.")
-        except Exception as e:
-            return f"Error executing generated SPARQL query: {e}"
+        return full_rag_chain
 
-        # Step 3: Synthesize the final answer.
-        print("\nStep 3: Synthesizing final answer...")
-        final_answer = self.answer_synthesis_chain.run(
-            question=question, query_results=results_str
-        )
-        return final_answer
+    # --- Public Interface ---
 
+    def ask(self, question: str) -> str:
+        """Asks a question to the RAG pipeline."""
+        print(f"\n> Executing query for question: '{question}'")
+        # The chain now expects a dictionary with a 'question' key.
+        result = self.chain.invoke({"question": question})
+        return result
+
+
+# ==============================================================================
+# --- Main Execution Block (for demonstration) ---
+# ==============================================================================
 
 if __name__ == "__main__":
+
     if not os.getenv("OPENAI_API_KEY"):
-        print("="*60 + "\nERROR: OPENAI_API_KEY environment variable is not set.\n" + "="*60)
-    else:
-        CONFIG = {
-            "graph_path": Path("./data/exploitation/knowledge_graph.ttl"),
-            "llm_model_name": "gpt-4",
-            "temperature": 0.0,
-        }
-        rag_pipeline = GraphRAGPipeline(config=CONFIG)
-        
-        question = "Which are the top 3 most populated municipalities in the Barcelonès comarca?"
-        
-        final_answer = rag_pipeline.run(question=question)
-        print("\n--- Final Answer ---")
-        print(final_answer)
+        raise ValueError("Please set the OPENAI_API_KEY environment variable.")
+
+    GRAPH_FILE_PATH = Path("./data/exploitation/knowledge_graph.ttl")
+
+    LLM_CONFIGURATION = {
+        "model": "gpt-4o-mini",
+        "temperature": 0
+    }
+
+    try:
+        rag_pipeline = GraphRAGPipeline(
+            turtle_path=GRAPH_FILE_PATH,
+            llm_config=LLM_CONFIGURATION
+        )
+
+        questions_to_ask = [
+            "What is the population of the municipality of Girona?",
+        ]
+
+        for q in questions_to_ask:
+            answer = rag_pipeline.ask(q)
+            print("\n< Answer:")
+            print(answer)
+            print("-" * 40)
+
+    except FileNotFoundError as e:
+        print(f"\n[ERROR] Could not start the pipeline. {e}")
+    except Exception as e:
+        print(f"\n[ERROR] An unexpected error occurred: {e}")
