@@ -1,35 +1,19 @@
-# ==============================================================================
-#
-#                            Graph RAG Pipeline
-#
-# ==============================================================================
-#
-# Author: Your Programming Buddy
-# Date: 2024-05-21 (Pure LCEL Version)
-# Description: A professional, modular pipeline built from scratch using modern
-#              LangChain Expression Language (LCEL). This approach offers full
-#              transparency and control, avoiding the complexities of legacy
-#              chains.
-#
-# ==============================================================================
-
-
 # --- Imports ---
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-# --- LangChain Core Imports ---
-from langchain_community.graphs import RdfGraph
+# --- LangChain & RDFLib Imports ---
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import Runnable, RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
+from rdflib import Graph as RdfLibGraph
 
 
 # ==============================================================================
-# --- Utility Function: LLM Output Sanitizer ---
+# --- Utility Function: LLM Output ---
 # ==============================================================================
 
 def _extract_sparql_query(text: str) -> str:
@@ -60,14 +44,14 @@ class GraphRAGPipeline:
 
     # --- Private Helper Methods ---
 
-    def _load_graph(self, turtle_path: Path) -> RdfGraph:
-        """Loads the RDF graph from the specified Turtle file."""
+    def _load_graph(self, turtle_path: Path) -> RdfLibGraph:
+        """Loads the graph into a raw rdflib.Graph object for reliable querying."""
         if not turtle_path.exists():
             raise FileNotFoundError(f"Knowledge graph file not found at: {turtle_path}")
-
-        print(f"Loading graph from: {turtle_path}")
-        graph = RdfGraph(source_file=str(turtle_path), standard="rdf")
-        print(f"Graph loaded. Contains {len(graph.graph)} triples.")
+        print(f"Loading raw rdflib.Graph from: {turtle_path}")
+        graph = RdfLibGraph()
+        graph.parse(str(turtle_path), format="turtle")
+        print(f"Raw graph loaded. Contains {len(graph)} triples.")
         return graph
 
     def _create_llm(self, llm_config: Dict[str, Any]) -> ChatOpenAI:
@@ -77,21 +61,54 @@ class GraphRAGPipeline:
 
     def _create_rag_chain(self) -> Runnable:
         """
-        Creates the full RAG chain using LCEL.
-        This involves generating a SPARQL query, executing it, and synthesizing an answer.
+        Creates the full RAG chain using LCEL with a complete, hardcoded schema.
         """
-        print("Creating custom RAG chain with LCEL...")
+        print("Creating custom RAG chain with authoritative, hardcoded schema prompt...")
 
-        # --- 1. SPARQL Generation Chain ---
-        # This chain takes a question and generates a sanitized SPARQL query.
+        # This is the Grand Unified, Authoritative Prompt. It contains a perfect
+        # description of the graph, leaving nothing to chance.
         sparql_prompt = PromptTemplate(
-            input_variables=["question", "schema"],
-            template="""You are an expert at converting user questions into SPARQL queries.
-Given an input question, create a syntactically correct SPARQL query to run.
-You must use the provided schema to generate the query. Do not add any text outside of the query itself.
+            input_variables=["question"],
+            template="""You are an expert at converting user questions into SPARQL queries for a specific knowledge graph about Catalonia.
 
-Schema:
-{schema}
+# Authoritative Graph Schema
+The graph has the following structure and predicates. You MUST adhere to this schema.
+
+## Core Entities
+- `proj:Municipality`: A municipality.
+- `proj:Comarca`: A comarca (county).
+- `proj:Province`: A province.
+- `proj:IndicatorObservation`: A data point for a single, non-annual indicator (like population).
+- `proj:AnnualDataPoint`: A collection of data points for a specific municipality and year.
+
+## Relationships & Properties
+
+### `proj:Municipality` properties:
+- `rdfs:label`: The name of the municipality (e.g., "Girona"@ca, "Pont de Suert, el"@ca).
+- `proj:isInComarca`: Links a Municipality to its `proj:Comarca`.
+- `proj:isNeighborOf`: Links a Municipality to a neighboring `proj:Municipality`.
+- `proj:hasObservation`: Links to an `proj:IndicatorObservation` node.
+- `proj:hasAnnualData`: Links to an `proj:AnnualDataPoint` node.
+
+### `proj:AnnualDataPoint` properties:
+- `proj:referenceYear`: The year for this data (e.g., "2021"^^xsd:gYear).
+- `proj:avgMonthlyRent`: The average monthly rent.
+- `proj:totalContracts`: The total number of rental contracts.
+- `proj:incomePerCapita`: The income per capita in EUR.
+- `proj:incomeIndex`: The income index compared to Catalonia=100.
+- `proj:incomeTotal`: The total income in thousands of EUR.
+
+### `proj:IndicatorObservation` properties:
+- `proj:field`: A direct URI link to the indicator type. Use the full URI. (e.g., `<http://example.com/catalonia-ontology/indicator/population>`).
+- `proj:value`: The numeric value of the observation.
+
+# Querying Rules
+1.  You MUST include `PREFIX` declarations for `proj`, `rdfs`, and `xsd` at the start of every query.
+2.  When matching a `rdfs:label` for a geographical entity, you MUST use the Catalan language tag `@ca`.
+3.  For municipalities with articles (el, la, l'), the official format is `Name, article` and the article MUST BE LOWERCASE (e.g., "Pont de Suert, el"@ca).
+
+# Your Turn
+Generate a SPARQL query for the following question.
 
 Question: {question}
 SPARQLQuery:
@@ -99,40 +116,36 @@ SPARQLQuery:
         )
 
         sparql_generation_chain = (
-            RunnablePassthrough.assign(schema=lambda _: self.graph.get_schema)
-            | sparql_prompt
+            sparql_prompt
             | self.llm
             | StrOutputParser()
             | _extract_sparql_query
         )
-
-        # --- 2. Full RAG Chain ---
-        # This orchestrates the entire process.
-        qa_prompt = PromptTemplate(
-            input_variables=["question", "context"],
-            template="""You are an assistant that answers user questions based on provided context.
-If the context is empty, say you do not have that information.
+        
+        qa_prompt = PromptTemplate.from_template(
+            """You are an assistant that answers user questions based on provided context.
+If the context is empty or contains no results, say you do not have sufficient information for that query.
 Your answer should be clear, concise, and directly based on the information given.
 
 Context:
 {context}
 
 Question: {question}
-Answer:
-""",
+Answer:"""
         )
 
-        # We define a function to run the SPARQL query and format the results.
         def run_sparql_and_get_context(sparql_query: str) -> Dict[str, Any]:
             print("\n--- Generated SPARQL ---\n", sparql_query)
-            query_results = self.graph.query(sparql_query)
-            return {"context": str([r.asdict() for r in query_results])}
+            try:
+                query_results = self.graph.query(sparql_query)
+                return {"context": str([r.asdict() for r in query_results])}
+            except Exception as e:
+                return {"context": f"SPARQL query failed with error: {e}"}
 
         full_rag_chain = (
             # The input to this whole chain is a dictionary: {"question": "..."}
             RunnablePassthrough.assign(sparql_query=sparql_generation_chain)
             | RunnablePassthrough.assign(
-                # The 'context' is derived from running the 'sparql_query'
                 context=lambda x: run_sparql_and_get_context(x["sparql_query"])["context"]
             )
             | qa_prompt
@@ -147,7 +160,6 @@ Answer:
     def ask(self, question: str) -> str:
         """Asks a question to the RAG pipeline."""
         print(f"\n> Executing query for question: '{question}'")
-        # The chain now expects a dictionary with a 'question' key.
         result = self.chain.invoke({"question": question})
         return result
 
@@ -164,7 +176,7 @@ if __name__ == "__main__":
     GRAPH_FILE_PATH = Path("./data/exploitation/knowledge_graph.ttl")
 
     LLM_CONFIGURATION = {
-        "model": "gpt-4o-mini",
+        "model": "gpt-4o",
         "temperature": 0
     }
 
@@ -176,6 +188,8 @@ if __name__ == "__main__":
 
         questions_to_ask = [
             "What is the population of the municipality of Girona?",
+            "For the municipality of Sabadell, what was its total number of rental contracts and its income per capita in 2021?",
+            "List the municipalities that are neighbors of 'El Pont de Suert' (name)."
         ]
 
         for q in questions_to_ask:
