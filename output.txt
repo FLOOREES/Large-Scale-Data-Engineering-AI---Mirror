@@ -1,0 +1,918 @@
+(.venv) cai@CAI-DESKTOP:~/gia/bda/large-scale-data-engineering-ai$ /home/cai/gia/bda/large-scale-data-engineering-ai/.venv/bin/python /home/cai/gia/bda/large-scale-data-engineering-ai/src/run.py > output.txt
+Folder already exists: data/landing
+Folder already exists: data/formatted
+Folder already exists: data/trusted
+Folder already exists: data/exploitation/municipal_annual
+Folder already exists: data/analysis
+Folder structure ready.
+Initializing Spark Session...
+25/06/08 20:14:57 WARN Utils: Your hostname, CAI-DESKTOP resolves to a loopback address: 127.0.1.1; using 10.255.255.254 instead (on interface lo)
+25/06/08 20:14:57 WARN Utils: Set SPARK_LOCAL_IP if you need to bind to another address
+:: loading settings :: url = jar:file:/home/cai/gia/bda/large-scale-data-engineering-ai/.venv/lib/python3.10/site-packages/pyspark/jars/ivy-2.5.1.jar!/org/apache/ivy/core/settings/ivysettings.xml
+Ivy Default Cache set to: /home/cai/.ivy2/cache
+The jars for the packages stored in: /home/cai/.ivy2/jars
+io.delta#delta-spark_2.12 added as a dependency
+:: resolving dependencies :: org.apache.spark#spark-submit-parent-20368638-cd53-401e-915e-5e56a93f1517;1.0
+        confs: [default]
+        found io.delta#delta-spark_2.12;3.3.0 in central
+        found io.delta#delta-storage;3.3.0 in central
+        found org.antlr#antlr4-runtime;4.9.3 in central
+:: resolution report :: resolve 153ms :: artifacts dl 7ms
+        :: modules in use:
+        io.delta#delta-spark_2.12;3.3.0 from central in [default]
+        io.delta#delta-storage;3.3.0 from central in [default]
+        org.antlr#antlr4-runtime;4.9.3 from central in [default]
+        ---------------------------------------------------------------------
+        |                  |            modules            ||   artifacts   |
+        |       conf       | number| search|dwnlded|evicted|| number|dwnlded|
+        ---------------------------------------------------------------------
+        |      default     |   3   |   0   |   0   |   0   ||   3   |   0   |
+        ---------------------------------------------------------------------
+:: retrieving :: org.apache.spark#spark-submit-parent-20368638-cd53-401e-915e-5e56a93f1517
+        confs: [default]
+        0 artifacts copied, 3 already retrieved (0kB/6ms)
+25/06/08 20:15:08 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+Spark Session Initialized. Log level set to ERROR.
+
+====================================================================================================
+PIPELINE: STARTING LANDING ZONE (STAGE 1)
+====================================================================================================
+2025-06-08 20:15:09 - landing.lloguer - INFO - Lloguer initialized:
+2025-06-08 20:15:09 - landing.lloguer - INFO -   API URL: https://analisi.transparenciacatalunya.cat/resource/qww9-bvhh.json
+2025-06-08 20:15:09 - landing.lloguer - INFO -   Output Parquet: ./data/landing/lloguer.parquet
+2025-06-08 20:15:09 - landing.lloguer - INFO -   Settings: Limit=1000, Delay=0.5s, Timeout=60s
+--- Running Idescat Landing Zone (Indicators: 15) ---
+Fetching list of all municipalities...
+Found 947 unique municipality IDs.
+
+Fetching indicators for 947 municipalities using up to 10 parallel workers...
+Fetching data progress:
+100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 947/947 [01:47<00:00,  8.80municipality/s]
+
+Processing fetched data and saving...
+Successfully saved landing data to PARQUET: ./data/landing/idescat.parquet
+Total rows saved: 13786
+
+--- Idescat Landing Zone Task Complete ---
+2025-06-08 20:16:59 - landing.lloguer - INFO - --- Starting Lloguer Run (Verbose: False) ---
+2025-06-08 20:16:59 - landing.lloguer - INFO - Starting full data fetch...
+2025-06-08 20:17:00 - landing.lloguer - INFO - Fetched 1000 records (offset=0). Total so far: 1000
+2025-06-08 20:17:02 - landing.lloguer - INFO - Fetched 1000 records (offset=1000). Total so far: 2000
+2025-06-08 20:17:04 - landing.lloguer - INFO - Fetched 1000 records (offset=2000). Total so far: 3000
+2025-06-08 20:17:06 - landing.lloguer - INFO - Fetched 1000 records (offset=3000). Total so far: 4000
+2025-06-08 20:17:08 - landing.lloguer - INFO - Fetched 1000 records (offset=4000). Total so far: 5000
+2025-06-08 20:17:10 - landing.lloguer - INFO - Fetched 1000 records (offset=5000). Total so far: 6000
+2025-06-08 20:17:12 - landing.lloguer - INFO - Fetched 1000 records (offset=6000). Total so far: 7000
+2025-06-08 20:17:14 - landing.lloguer - INFO - Fetched 1000 records (offset=7000). Total so far: 8000
+2025-06-08 20:17:16 - landing.lloguer - INFO - Fetched 1000 records (offset=8000). Total so far: 9000
+2025-06-08 20:17:18 - landing.lloguer - INFO - Fetched 1000 records (offset=9000). Total so far: 10000
+2025-06-08 20:17:20 - landing.lloguer - INFO - Fetched 1000 records (offset=10000). Total so far: 11000
+2025-06-08 20:17:23 - landing.lloguer - INFO - Fetched 1000 records (offset=11000). Total so far: 12000
+2025-06-08 20:17:24 - landing.lloguer - INFO - Fetched 1000 records (offset=12000). Total so far: 13000
+2025-06-08 20:17:27 - landing.lloguer - INFO - Fetched 1000 records (offset=13000). Total so far: 14000
+2025-06-08 20:17:29 - landing.lloguer - INFO - Fetched 1000 records (offset=14000). Total so far: 15000
+2025-06-08 20:17:31 - landing.lloguer - INFO - Fetched 1000 records (offset=15000). Total so far: 16000
+2025-06-08 20:17:33 - landing.lloguer - INFO - Fetched 1000 records (offset=16000). Total so far: 17000
+2025-06-08 20:17:34 - landing.lloguer - INFO - Fetched 1000 records (offset=17000). Total so far: 18000
+2025-06-08 20:17:36 - landing.lloguer - INFO - Fetched 1000 records (offset=18000). Total so far: 19000
+2025-06-08 20:17:38 - landing.lloguer - INFO - Fetched 1000 records (offset=19000). Total so far: 20000
+2025-06-08 20:17:41 - landing.lloguer - INFO - Fetched 1000 records (offset=20000). Total so far: 21000
+2025-06-08 20:17:43 - landing.lloguer - INFO - Fetched 1000 records (offset=21000). Total so far: 22000
+2025-06-08 20:17:45 - landing.lloguer - INFO - Fetched 1000 records (offset=22000). Total so far: 23000
+2025-06-08 20:17:47 - landing.lloguer - INFO - Fetched 1000 records (offset=23000). Total so far: 24000
+2025-06-08 20:17:49 - landing.lloguer - INFO - Fetched 1000 records (offset=24000). Total so far: 25000
+2025-06-08 20:17:51 - landing.lloguer - INFO - Fetched 1000 records (offset=25000). Total so far: 26000
+2025-06-08 20:17:53 - landing.lloguer - INFO - Fetched 1000 records (offset=26000). Total so far: 27000
+2025-06-08 20:17:55 - landing.lloguer - INFO - Fetched 1000 records (offset=27000). Total so far: 28000
+2025-06-08 20:17:57 - landing.lloguer - INFO - Fetched 1000 records (offset=28000). Total so far: 29000
+2025-06-08 20:17:59 - landing.lloguer - INFO - Fetched 1000 records (offset=29000). Total so far: 30000
+2025-06-08 20:18:01 - landing.lloguer - INFO - Fetched 1000 records (offset=30000). Total so far: 31000
+2025-06-08 20:18:03 - landing.lloguer - INFO - Fetched 1000 records (offset=31000). Total so far: 32000
+2025-06-08 20:18:04 - landing.lloguer - INFO - Fetched 1000 records (offset=32000). Total so far: 33000
+2025-06-08 20:18:06 - landing.lloguer - INFO - Fetched 1000 records (offset=33000). Total so far: 34000
+2025-06-08 20:18:08 - landing.lloguer - INFO - Fetched 1000 records (offset=34000). Total so far: 35000
+2025-06-08 20:18:10 - landing.lloguer - INFO - Fetched 1000 records (offset=35000). Total so far: 36000
+2025-06-08 20:18:12 - landing.lloguer - INFO - Fetched 1000 records (offset=36000). Total so far: 37000
+2025-06-08 20:18:14 - landing.lloguer - INFO - Fetched 1000 records (offset=37000). Total so far: 38000
+2025-06-08 20:18:16 - landing.lloguer - INFO - Fetched 1000 records (offset=38000). Total so far: 39000
+2025-06-08 20:18:18 - landing.lloguer - INFO - Fetched 1000 records (offset=39000). Total so far: 40000
+2025-06-08 20:18:20 - landing.lloguer - INFO - Fetched 324 records (offset=40000). Total so far: 40324
+2025-06-08 20:18:20 - landing.lloguer - INFO - Received fewer records than limit. Assuming fetch complete.
+2025-06-08 20:18:20 - landing.lloguer - INFO - Finished data fetch. Total records downloaded: 40324
+2025-06-08 20:18:20 - landing.lloguer - INFO - Preparing to save 40324 records to ./data/landing/lloguer.parquet (overwrite mode).
+2025-06-08 20:18:20 - landing.lloguer - INFO - Writing 40324 records using engine 'pyarrow'...
+2025-06-08 20:18:20 - landing.lloguer - INFO - Successfully saved data to ./data/landing/lloguer.parquet in 0.04 seconds.
+2025-06-08 20:18:20 - landing.lloguer - INFO - --- Lloguer Run Completed Successfully. Saved 40324 records. ---
+LANDING ZONE COMPLETED
+
+====================================================================================================
+PIPELINE: STARTING FORMATTED ZONE (STAGE 2)
+====================================================================================================
+Formatted Zone Initialized. Input: ./data/landing/idescat.parquet, Output: ./data/formatted/idescat
+Lloguer Formatted Zone Initialized.
+  Input Path: ./data/landing/lloguer.parquet
+  Output Delta Path: ./data/formatted/lloguer
+RFDBC Formatted Zone Initialized. Output Delta Path: ./data/formatted/rfdbc
+Column Renaming Map: {'YEAR_CODE': 'year_code', 'YEAR_LABEL': 'year_label', 'MUN_CODE': 'municipality_id', 'MUN_LABEL': 'municipality_name', 'CONCEPT_CODE': 'concept_code', 'CONCEPT_LABEL': 'concept_label', 'INDICATOR_CODE': 'indicator_code', 'INDICATOR_LABEL': 'indicator_label', 'VALUE': 'value'}
+--- Running Idescat Formatted Zone Task ---
+Reading landing data from: ./data/landing/idescat.parquet using explicit read schema
+Landing data read schema:
+root
+ |-- municipality_id: string (nullable = true)
+ |-- municipality_name: string (nullable = true)
+ |-- comarca_name: string (nullable = true)
+ |-- indicator_id: string (nullable = true)
+ |-- indicator_name: string (nullable = true)
+ |-- reference_year: long (nullable = true)
+ |-- municipality_value: double (nullable = true)
+ |-- comarca_value: double (nullable = true)
+ |-- catalunya_value: double (nullable = true)
+ |-- source_update_timestamp: long (nullable = true)
+
+Normalizing municipality_id...
+Normalization complete. Sample IDs after normalization:
++---------------+                                                               
+|municipality_id|
++---------------+
+|25032          |
+|25912          |
+|43085          |
+|08088          |
+|17024          |
++---------------+
+only showing top 5 rows
+
+Applying final schema and casting types...
+  - Casting 'reference_year' from LongType() to IntegerType()
+  - Converting 'source_update_timestamp' from Long (nanos) to Timestamp
+Schema applied. Final schema:
+root
+ |-- municipality_id: string (nullable = true)
+ |-- municipality_name: string (nullable = true)
+ |-- comarca_name: string (nullable = true)
+ |-- indicator_id: string (nullable = true)
+ |-- indicator_name: string (nullable = true)
+ |-- reference_year: integer (nullable = true)
+ |-- municipality_value: double (nullable = true)
+ |-- comarca_value: double (nullable = true)
+ |-- catalunya_value: double (nullable = true)
+ |-- source_update_timestamp: timestamp (nullable = true)
+
+Writing formatted data to Delta table: ./data/formatted/idescat
+Formatted data successfully written to ./data/formatted/idescat                 
+--- Idescat Formatted Zone Task Successfully Completed ---
+--- Running Lloguer Formatted Zone Task (Verbose: False) ---
+Reading landing data from: ./data/landing/lloguer.parquet
+Landing data schema (inferred by Spark):
+root
+ |-- ambit_territorial: string (nullable = true)
+ |-- codi_territorial: string (nullable = true)
+ |-- nom_territori: string (nullable = true)
+ |-- any: string (nullable = true)
+ |-- periode: string (nullable = true)
+ |-- habitatges: string (nullable = true)
+ |-- renda: string (nullable = true)
+ |-- tram_preus: string (nullable = true)
+
+Applying final schema and casting types...
+  - Casting 'any' from StringType() to IntegerType()
+  - Casting 'habitatges' from StringType() to IntegerType()
+  - Casting 'renda' from StringType() to DoubleType()
+Schema after casting. Final desired schema:
+root
+ |-- ambit_territorial: string (nullable = true)
+ |-- codi_territorial: string (nullable = true)
+ |-- nom_territori: string (nullable = true)
+ |-- any: integer (nullable = true)
+ |-- periode: string (nullable = true)
+ |-- habitatges: integer (nullable = true)
+ |-- renda: double (nullable = true)
+ |-- tram_preus: string (nullable = true)
+
+Writing formatted data to Delta table: ./data/formatted/lloguer
+Formatted Lloguer data successfully written to ./data/formatted/lloguer
+--- Lloguer Formatted Zone Task Successfully Completed ---
+--- Running RFDBC Formatted Zone Task ---
+Input data loaded successfully from ./data/landing/rfdbc.json.
+Transforming raw data dictionary into records...
+Successfully transformed data into 16776 records.
+Creating intermediate Spark DataFrame...
+Intermediate Spark DataFrame created successfully. Schema:
+root
+ |-- YEAR_CODE: string (nullable = true)
+ |-- YEAR_LABEL: string (nullable = true)
+ |-- MUN_CODE: string (nullable = true)
+ |-- MUN_LABEL: string (nullable = true)
+ |-- CONCEPT_CODE: string (nullable = true)
+ |-- CONCEPT_LABEL: string (nullable = true)
+ |-- INDICATOR_CODE: string (nullable = true)
+ |-- INDICATOR_LABEL: string (nullable = true)
+ |-- VALUE: double (nullable = true)
+
+Renaming columns for final output...
+Columns renamed. Final Schema:
+root
+ |-- year_code: string (nullable = true)
+ |-- year_label: string (nullable = true)
+ |-- municipality_id: string (nullable = true)
+ |-- municipality_name: string (nullable = true)
+ |-- concept_code: string (nullable = true)
+ |-- concept_label: string (nullable = true)
+ |-- indicator_code: string (nullable = true)
+ |-- indicator_label: string (nullable = true)
+ |-- value: double (nullable = true)
+
+Sample data with new column names (first 5 rows):
++---------+----------+---------------+-----------------+------------+-------------------------------+----------------+----------------------------------+--------+
+|year_code|year_label|municipality_id|municipality_name|concept_code|concept_label                  |indicator_code  |indicator_label                   |value   |
++---------+----------+---------------+-----------------+------------+-------------------------------+----------------+----------------------------------+--------+
+|2010     |2010      |080018         |Abrera           |GROSS_INCOME|renda familiar disponible bruta|VALUE_EK        |valor (milers €)                  |195976.0|
+|2010     |2010      |080018         |Abrera           |GROSS_INCOME|renda familiar disponible bruta|PER_CAPITA_EUR  |per habitant (€)                  |17084.0 |
+|2010     |2010      |080018         |Abrera           |GROSS_INCOME|renda familiar disponible bruta|PER_CAPITA_INDEX|per habitant (índex Catalunya=100)|101.8   |
+|2010     |2010      |250030         |Agramunt         |GROSS_INCOME|renda familiar disponible bruta|VALUE_EK        |valor (milers €)                  |77467.0 |
+|2010     |2010      |250030         |Agramunt         |GROSS_INCOME|renda familiar disponible bruta|PER_CAPITA_EUR  |per habitant (€)                  |13839.0 |
++---------+----------+---------------+-----------------+------------+-------------------------------+----------------+----------------------------------+--------+
+only showing top 5 rows
+
+Writing formatted data to Delta table: ./data/formatted/rfdbc
+Formatted data successfully written to ./data/formatted/rfdbc
+--- RFDBC Formatted Zone Task Successfully Completed ---
+FORMATTED ZONE COMPLETED
+
+====================================================================================================
+PIPELINE: STARTING TRUSTED ZONE (STAGE 3)
+====================================================================================================
+Trusted Zone Initialized. Input: ./data/formatted/idescat, Output: ./data/trusted/idescat
+Lloguer Trusted Zone Initialized.
+  Input Formatted Path: ./data/formatted/lloguer
+  Output Trusted Path: ./data/trusted/lloguer
+RFDBCTrustedZone Initialized. Input: ./data/formatted/rfdbc, Output: ./data/trusted/rfdbc
+--- Running Idescat Trusted Zone Task ---
+Reading formatted data from Delta table: ./data/formatted/idescat
+Initial row count: 13786
+root
+ |-- municipality_id: string (nullable = true)
+ |-- municipality_name: string (nullable = true)
+ |-- comarca_name: string (nullable = true)
+ |-- indicator_id: string (nullable = true)
+ |-- indicator_name: string (nullable = true)
+ |-- reference_year: integer (nullable = true)
+ |-- municipality_value: double (nullable = true)
+ |-- comarca_value: double (nullable = true)
+ |-- catalunya_value: double (nullable = true)
+ |-- source_update_timestamp: timestamp (nullable = true)
+
+Rows after filtering null keys: 13786 (Removed: 0)
+Rows after year range check (2000-2025): 13786 (Removed: 0)
+
+Applying comprehensive validation rules for indicator values...
+Rows after all value range checks: 13786 (Removed: 0)
+Rows after deduplication on ['municipality_id', 'indicator_id', 'reference_year']: 13786 (Removed: 0)
+Writing cleaned data to Delta table: ./data/trusted/idescat
+Trusted data successfully written to ./data/trusted/idescat
+--- Idescat Trusted Zone Task Successfully Completed ---
+--- Running Lloguer Trusted Zone Task (Verbose: False) ---
+Reading formatted data from Delta table: ./data/formatted/lloguer
+Initial row count from Formatted Zone: 40324
+Schema read from Formatted Zone:
+root
+ |-- ambit_territorial: string (nullable = true)
+ |-- codi_territorial: string (nullable = true)
+ |-- nom_territori: string (nullable = true)
+ |-- any: integer (nullable = true)
+ |-- periode: string (nullable = true)
+ |-- habitatges: integer (nullable = true)
+ |-- renda: double (nullable = true)
+ |-- tram_preus: string (nullable = true)
+
+Rows after filtering NULLs in essential columns (['ambit_territorial', 'codi_territorial', 'nom_territori', 'any', 'periode', 'tram_preus']): 40324 (Removed: 0)
+Rows after year range check (2005-2026): 40324 (Removed: 0)
+Rows after 'habitatges' >= 0 check: 40324 (Removed: 0)
+Rows after 'renda' > 0 (or NULL) check: 40324 (Removed: 0)
+
+--- Examination: Calculating Unique Municipality-Year Combinations ---
+Total unique municipality-year combinations found in filtered data: 14433
+
+--- Checking for duplicate keys with differing values ---
+Using key columns: ['ambit_territorial', 'nom_territori', 'codi_territorial', 'any', 'periode', 'tram_preus']
+No duplicate keys found with differing 'habitatges' or 'renda' values. Proceeding with standard deduplication.
+
+Applying deduplication based on columns: ['ambit_territorial', 'nom_territori', 'codi_territorial', 'any', 'periode', 'tram_preus']
+Rows after deduplication: 31311 (Removed: 9013)
+
+Writing cleaned data (31311 rows) to Trusted Delta table: ./data/trusted/lloguer
+Trusted Lloguer data successfully written to ./data/trusted/lloguer
+--- Lloguer Trusted Zone Task Successfully Completed ---
+
+--- Running RFDBC Trusted Zone Processing ---
+Loading data from Delta table: ./data/formatted/rfdbc
+Successfully loaded data with 16776 rows.
+Initial Schema:
+root
+ |-- year_code: string (nullable = true)
+ |-- year_label: string (nullable = true)
+ |-- municipality_id: string (nullable = true)
+ |-- municipality_name: string (nullable = true)
+ |-- concept_code: string (nullable = true)
+ |-- concept_label: string (nullable = true)
+ |-- indicator_code: string (nullable = true)
+ |-- indicator_label: string (nullable = true)
+ |-- value: double (nullable = true)
+
+
+--- Step: Removing Columns ---
+Columns dropped: ['concept_code', 'concept_label', 'year_code']
+Schema after column removal:
+root
+ |-- year_label: string (nullable = true)
+ |-- municipality_id: string (nullable = true)
+ |-- municipality_name: string (nullable = true)
+ |-- indicator_code: string (nullable = true)
+ |-- indicator_label: string (nullable = true)
+ |-- value: double (nullable = true)
+
+
+--- Step: Modifying Columns (Rename & Adjustments) ---
+Renamed column 'year_label' to 'year'.
+Modifying column 'municipality_id': Removing last digit.
+Applied modification to 'municipality_id'.
+Schema after column modifications:
+root
+ |-- year: string (nullable = true)
+ |-- municipality_id: string (nullable = true)
+ |-- municipality_name: string (nullable = true)
+ |-- indicator_code: string (nullable = true)
+ |-- indicator_label: string (nullable = true)
+ |-- value: double (nullable = true)
+
+
+--- Step: Removing Rows (Duplicates & Denial Constraints) ---
+Starting row removal with 16776 rows.
+- No duplicate rows found.
+  Rows remaining: 16776
+
+Applying constraint: 'year' between 2000 and 2025 (inclusive).
+- Removed 0 rows violating year constraint.
+  Rows remaining: 16776
+
+Applying constraint: length of 'municipality_id' must be 5.
+- Removed 36 rows violating municipality ID length constraint.
+  Rows remaining: 16740
+
+Analyzing column: 'value'
+  > Found Min Value: 57.20, Max Value: 36448588.00
+  > Found 291 NULL or NaN values.
+Applying constraint: 'value' must be between 0 and 999999999.
+- Removed 291 rows violating the value range constraint [0, 999999999].
+  Rows remaining: 16449
+
+Final row count after all constraints: 16449
+
+--- Final Inspection Before Save ---
+Final Schema:
+root
+ |-- year: string (nullable = true)
+ |-- municipality_id: string (nullable = true)
+ |-- municipality_name: string (nullable = true)
+ |-- indicator_code: string (nullable = true)
+ |-- indicator_label: string (nullable = true)
+ |-- value: double (nullable = true)
+
+Final Row Count: 16449
+Sample of final data (first 10 rows):
++----+---------------+---------------------------+----------------+----------------------------------+--------+
+|year|municipality_id|municipality_name          |indicator_code  |indicator_label                   |value   |
++----+---------------+---------------------------+----------------+----------------------------------+--------+
+|2021|43020          |Banyeres del Penedès       |VALUE_EK        |valor (milers €)                  |55651.0 |
+|2021|08089          |Gavà                       |VALUE_EK        |valor (milers €)                  |909341.0|
+|2021|17180          |Santa Coloma de Farners    |VALUE_EK        |valor (milers €)                  |212553.0|
+|2021|08245          |Santa Coloma de Gramenet   |PER_CAPITA_INDEX|per habitant (índex Catalunya=100)|82.9    |
+|2021|17221          |Vilafant                   |PER_CAPITA_EUR  |per habitant (€)                  |16975.0 |
+|2021|08207          |Sant Esteve de Palautordera|PER_CAPITA_EUR  |per habitant (€)                  |18931.0 |
+|2021|08238          |Sant Quirze del Vallès     |PER_CAPITA_EUR  |per habitant (€)                  |23491.0 |
+|2021|17220          |Viladrau                   |PER_CAPITA_EUR  |per habitant (€)                  |18601.0 |
+|2020|17233          |Vilobí d'Onyar             |PER_CAPITA_EUR  |per habitant (€)                  |17483.0 |
+|2021|17032          |Cadaqués                   |PER_CAPITA_INDEX|per habitant (índex Catalunya=100)|70.1    |
++----+---------------+---------------------------+----------------+----------------------------------+--------+
+only showing top 10 rows
+
+
+Saving cleaned data to Delta table: ./data/trusted/rfdbc
+Successfully saved cleaned data to ./data/trusted/rfdbc
+--- RFDBC Trusted Zone Processing Successfully Completed ---
+
+====================================================================================================
+PIPELINE: STARTING EXPLOITATION ZONE (STAGE 4)
+====================================================================================================
+--- Step 1: Creating Master Geo-Data Source ---
+Reading names and comarca links from: ./data/landing/idescat.parquet
+Loading geometry from shapefile: ./geospatial/MUC_TM.shp
+
+Normalizing keys for merge...
+
+Merging Idescat data with shapefile geometry...
+Master GeoDataFrame created with 941 municipalities with valid geometry.
+
+--- Step 2: Calculating Municipality Neighbors (Robust Method) ---
+Creating spatial index for faster neighbor search...
+Municipalities: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 941/941 [00:02<00:00, 417.79it/s]
+Saving municipality neighbors to: data/relations/municipality_neighbors.json
+Municipality neighbors JSON created successfully.
+
+--- Step 3: Generating Comarca-Level Relations (Derived Method) ---
+Deriving comarca neighbors from municipality adjacencies...
+Saving comarca neighbors to: data/relations/comarca_neighbors.json
+Comarca neighbors JSON created successfully.
+Saving comarca-to-province map to: data/relations/comarca_to_province.json
+Comarca-to-province JSON created successfully.
+
+Process completed successfully!
+Exploitation Zone Initialized.
+
+--- Step 1: Loading all trusted data sources ---
+All trusted data and relation files loaded successfully.
+
+--- Step 2a: Creating Consolidated Annual Table for ML ---
+
+--- Saving consolidated annual table to: data/exploitation/municipal_annual ---
+Consolidated table for ML saved successfully.
+
+--- Step 2b: Preparing Data for Knowledge Graph Population ---
+
+--- Step 3: Populating the Knowledge Graph ---
+Generating structural nodes and relationships...
+Creating Geo Entities: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 941/941 [00:00<00:00, 25343.80it/s]
+Generating nodes for Idescat indicator concepts...
+Generating Idescat latest-value observations...
+Creating Idescat Observations: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 13786/13786 [00:01<00:00, 8929.01it/s]
+Generating AnnualDataPoint nodes with all annual data...
+Creating Annual Data Points: 14444it [00:02, 6549.77it/s]
+
+--- Saving Knowledge Graph to data/exploitation/knowledge_graph.ttl ---
+Knowledge Graph saved successfully. Contains 179913 triples.
+
+--- Exploitation Zone (KG & ML Table) Task Successfully Completed ---
+
+====================================================================================================
+PIPELINE: STARTING ANALYSIS (STAGE 5) - Parts: ['query', 'rag_query', 'embeddings', 'prediction']
+====================================================================================================
+
+---------------------------------------- Running SPARQL Query Analysis ----------------------------------------
+KG Query Pipeline Initialized.
+Loading graph from 'data/exploitation/knowledge_graph.ttl'...
+Graph loaded successfully! It contains 179913 facts (triples).
+
+--- Executing Query: Debug: Girona Population ---
+
+Executing SPARQL query...
+Query executed. Found 1 results.
+
+--- Results ---
+   population
+0    106476.0
+
+--- Executing Query: Debug: Sabadell Annual Data 2021 ---
+
+Executing SPARQL query...
+Query executed. Found 1 results.
+
+--- Results ---
+   total_contracts  income_per_capita
+0             5841            18314.0
+
+--- Executing Query: Debug: El Pont de Suert Neighbors ---
+
+Executing SPARQL query...
+Query executed. Found 5 results.
+
+--- Results ---
+       neighbor_label
+0     Vall de Boí, la
+1       Conca de Dalt
+2  Sarroca de Bellera
+3           Senterada
+4            Vilaller
+
+--- Executing Query: Complex: Girona Province Neighbors of Populous Towns with Cheap Rent ---
+
+Executing SPARQL query...
+Query executed. Found 34 results.
+
+--- Results ---
+                        municipality_name  avg_rent          neighbor_name  neighbor_population
+0                                   Begur  683.2964            Palafrugell              24245.0
+1                                 Bescanó  598.1067                   Salt              33946.0
+2                                  Blanes  502.1074          Lloret de Mar              42134.0
+3                                 Cabanes  652.7822               Figueres              48670.0
+4                                Cadaqués  667.6976                  Roses              20255.0
+5   Castell d'Aro, Platja d'Aro i s'Agaró  697.3264  Sant Feliu de Guíxols              22934.0
+6                     Castelló d'Empúries  532.3860                  Roses              20255.0
+7                                   Celrà  578.7163                 Girona             106476.0
+8                      Cornellà del Terri  609.7730               Banyoles              20707.0
+9                       Far d'Empordà, el  400.0000               Figueres              48670.0
+10                               Forallac  610.7862            Palafrugell              24245.0
+11                                 Girona  622.6835                   Salt              33946.0
+12                          Lloret de Mar  512.0832                 Blanes              41935.0
+13                    Maçanet de la Selva  601.1274          Lloret de Mar              42134.0
+14                               Mont-ras  554.5473            Palafrugell              24245.0
+15                        Palau-saverdera  650.1535                  Roses              20255.0
+16                              Porqueres  588.1236               Banyoles              20707.0
+17                   Port de la Selva, el  533.1500                  Roses              20255.0
+18                            Preses, les  382.2129                   Olot              38836.0
+19                                  Quart  622.5956                 Girona             106476.0
+20                               Regencós  616.6667            Palafrugell              24245.0
+21                               Riudaura  575.0000                   Olot              38836.0
+22                                   Salt  473.2928                 Girona             106476.0
+23                    Sant Joan les Fonts  502.0139                   Olot              38836.0
+24                              Santa Pau  529.1107                   Olot              38836.0
+25                          Sarrià de Ter  674.7974                 Girona             106476.0
+26                       Selva de Mar, la  400.0000                  Roses              20255.0
+27                           Tossa de Mar  524.9069          Lloret de Mar              42134.0
+28                      Vall d'en Bas, la  600.5317                   Olot              38836.0
+29                     Vall de Bianya, la  450.3846                   Olot              38836.0
+30                               Vidreres  618.6931          Lloret de Mar              42134.0
+31                             Vila-sacra  625.0000               Figueres              48670.0
+32                            Vilabertran  550.0000               Figueres              48670.0
+33                               Vilafant  625.5763               Figueres              48670.0
+
+---------------------------------------- Running GraphRAG Analysis ----------------------------------------
+--- Initializing Graph RAG Pipeline ---
+Loading raw rdflib.Graph from: data/exploitation/knowledge_graph.ttl
+Raw graph loaded. Contains 179913 triples.
+Creating LLM with config: {'model': 'gpt-4o', 'temperature': 0}
+Creating custom RAG chain with authoritative, hardcoded schema prompt...
+--- Pipeline Initialized Successfully ---
+
+> Executing query for question: 'What is the population of the municipality of Girona?'
+2025-06-08 20:25:17 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+--- Generated SPARQL ---
+ PREFIX proj: <http://example.com/catalonia-ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT ?populationValue WHERE {
+  ?municipality a proj:Municipality ;
+                rdfs:label "Girona"@ca ;
+                proj:hasObservation ?observation .
+  ?observation proj:field <http://example.com/catalonia-ontology/indicator/population> ;
+               proj:value ?populationValue .
+}
+2025-06-08 20:25:18 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+> Question: What is the population of the municipality of Girona?
+
+< Answer:
+The population of the municipality of Girona is 106,476.
+----------------------------------------
+
+> Executing query for question: 'For the municipality of Sabadell, what was its total number of rental contracts and its income per capita in 2021?'
+2025-06-08 20:25:19 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+--- Generated SPARQL ---
+ PREFIX proj: <http://example.com/catalonia-ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT ?totalContracts ?incomePerCapita
+WHERE {
+  ?municipality rdfs:label "Sabadell"@ca ;
+                proj:hasAnnualData ?annualDataPoint .
+  ?annualDataPoint proj:referenceYear "2021"^^xsd:gYear ;
+                   proj:totalContracts ?totalContracts ;
+                   proj:incomePerCapita ?incomePerCapita .
+}
+2025-06-08 20:25:20 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+> Question: For the municipality of Sabadell, what was its total number of rental contracts and its income per capita in 2021?
+
+< Answer:
+The total number of rental contracts for the municipality of Sabadell was 5,841, and its income per capita was 18,314.0 in 2021.
+----------------------------------------
+
+> Executing query for question: 'List the municipalities that are neighbors of 'El Pont de Suert' (name).'
+2025-06-08 20:25:22 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+--- Generated SPARQL ---
+ PREFIX proj: <http://example.com/catalonia-ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT ?neighborMunicipalityLabel
+WHERE {
+  ?municipality rdfs:label "Pont de Suert, el"@ca ;
+                proj:isNeighborOf ?neighborMunicipality .
+  ?neighborMunicipality rdfs:label ?neighborMunicipalityLabel .
+}
+2025-06-08 20:25:23 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+
+> Question: List the municipalities that are neighbors of 'El Pont de Suert' (name).
+
+< Answer:
+The municipalities that are neighbors of 'El Pont de Suert' are Vall de Boí, la; Conca de Dalt; Sarroca de Bellera; Senterada; and Vilaller.
+----------------------------------------
+
+---------------------------------------- Running Embeddings Experiments ----------------------------------------
+2025-06-08 20:25:23 - analysis.kg_embeddings - INFO - Pipeline initialized for 25 experiments on device 'CUDA'
+2025-06-08 20:25:23 - analysis.kg_embeddings - INFO - Force training set to: False
+2025-06-08 20:25:23 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:24 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:24 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransH_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/TransH_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:04<00:00, 1.69ktriple/s]
+2025-06-08 20:25:29 - pykeen.evaluation.evaluator - INFO - Evaluation took 4.82s seconds
+2025-06-08 20:25:29 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:29 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:29 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransE_dim_64'. Loading from: data/analysis/model_embeddings/comparison_run/TransE_dim_64
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:01<00:00, 5.30ktriple/s]
+2025-06-08 20:25:31 - pykeen.evaluation.evaluator - INFO - Evaluation took 1.66s seconds
+2025-06-08 20:25:31 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:31 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:31 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransH_dim_64'. Loading from: data/analysis/model_embeddings/comparison_run/TransH_dim_64
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:02<00:00, 2.89ktriple/s]
+2025-06-08 20:25:34 - pykeen.evaluation.evaluator - INFO - Evaluation took 2.88s seconds
+2025-06-08 20:25:34 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:34 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:34 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransR_dim_64'. Loading from: data/analysis/model_embeddings/comparison_run/TransR_dim_64
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:03<00:00, 2.30ktriple/s]
+2025-06-08 20:25:38 - pykeen.evaluation.evaluator - INFO - Evaluation took 3.57s seconds
+2025-06-08 20:25:38 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:38 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:38 - analysis.kg_embeddings - INFO - Found pre-trained model for 'DistMult_dim_64'. Loading from: data/analysis/model_embeddings/comparison_run/DistMult_dim_64
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:01<00:00, 4.46ktriple/s]
+2025-06-08 20:25:40 - pykeen.evaluation.evaluator - INFO - Evaluation took 1.93s seconds
+2025-06-08 20:25:40 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:40 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:40 - analysis.kg_embeddings - INFO - Found pre-trained model for 'RotatE_dim_64'. Loading from: data/analysis/model_embeddings/comparison_run/RotatE_dim_64
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:02<00:00, 3.13ktriple/s]
+2025-06-08 20:25:43 - pykeen.evaluation.evaluator - INFO - Evaluation took 2.70s seconds
+2025-06-08 20:25:43 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:43 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:43 - analysis.kg_embeddings - INFO - Found pre-trained model for 'ComplEx_dim_64'. Loading from: data/analysis/model_embeddings/comparison_run/ComplEx_dim_64
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:00<00:00, 10.8ktriple/s]
+2025-06-08 20:25:44 - pykeen.evaluation.evaluator - INFO - Evaluation took 0.90s seconds
+2025-06-08 20:25:44 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=False) ---
+2025-06-08 20:25:44 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:44 - analysis.kg_embeddings - INFO - Found pre-trained model for 'RGCN_dim_64'. Loading from: data/analysis/model_embeddings/comparison_run/RGCN_dim_64
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:01<00:00, 4.53ktriple/s]
+2025-06-08 20:25:46 - pykeen.evaluation.evaluator - INFO - Evaluation took 1.90s seconds
+2025-06-08 20:25:46 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:46 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:46 - analysis.kg_embeddings - INFO - Found pre-trained model for 'CompGCN_dim_64'. Loading from: data/analysis/model_embeddings/comparison_run/CompGCN_dim_64
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:01<00:00, 4.56ktriple/s]
+2025-06-08 20:25:48 - pykeen.evaluation.evaluator - INFO - Evaluation took 1.90s seconds
+2025-06-08 20:25:48 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:49 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:49 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransE_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/TransE_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:02<00:00, 3.53ktriple/s]
+2025-06-08 20:25:51 - pykeen.evaluation.evaluator - INFO - Evaluation took 2.40s seconds
+2025-06-08 20:25:51 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:51 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:51 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransH_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/TransH_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:04<00:00, 1.84ktriple/s]
+2025-06-08 20:25:56 - pykeen.evaluation.evaluator - INFO - Evaluation took 4.43s seconds
+2025-06-08 20:25:56 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:25:56 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:25:56 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransR_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/TransR_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:03<00:00, 2.23ktriple/s]
+2025-06-08 20:26:00 - pykeen.evaluation.evaluator - INFO - Evaluation took 3.68s seconds
+2025-06-08 20:26:00 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:00 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:00 - analysis.kg_embeddings - INFO - Found pre-trained model for 'DistMult_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/DistMult_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:02<00:00, 3.59ktriple/s]
+2025-06-08 20:26:02 - pykeen.evaluation.evaluator - INFO - Evaluation took 2.36s seconds
+2025-06-08 20:26:02 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:02 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:03 - analysis.kg_embeddings - INFO - Found pre-trained model for 'RotatE_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/RotatE_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:03<00:00, 2.09ktriple/s]
+2025-06-08 20:26:06 - pykeen.evaluation.evaluator - INFO - Evaluation took 3.93s seconds
+2025-06-08 20:26:06 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:07 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:07 - analysis.kg_embeddings - INFO - Found pre-trained model for 'ComplEx_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/ComplEx_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:00<00:00, 10.9ktriple/s]
+2025-06-08 20:26:08 - pykeen.evaluation.evaluator - INFO - Evaluation took 0.89s seconds
+2025-06-08 20:26:08 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=False) ---
+2025-06-08 20:26:08 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:08 - analysis.kg_embeddings - INFO - Found pre-trained model for 'RGCN_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/RGCN_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:02<00:00, 3.42ktriple/s]
+2025-06-08 20:26:10 - pykeen.evaluation.evaluator - INFO - Evaluation took 2.47s seconds
+2025-06-08 20:26:10 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:11 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:11 - analysis.kg_embeddings - INFO - Found pre-trained model for 'CompGCN_dim_128'. Loading from: data/analysis/model_embeddings/comparison_run/CompGCN_dim_128
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:02<00:00, 3.26ktriple/s]
+2025-06-08 20:26:13 - pykeen.evaluation.evaluator - INFO - Evaluation took 2.58s seconds
+2025-06-08 20:26:13 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:14 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:14 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransE_dim_256'. Loading from: data/analysis/model_embeddings/comparison_run/TransE_dim_256
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:03<00:00, 2.12ktriple/s]
+2025-06-08 20:26:17 - pykeen.evaluation.evaluator - INFO - Evaluation took 3.87s seconds
+2025-06-08 20:26:17 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:18 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:18 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransH_dim_256'. Loading from: data/analysis/model_embeddings/comparison_run/TransH_dim_256
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:07<00:00, 1.01ktriple/s]
+2025-06-08 20:26:26 - pykeen.evaluation.evaluator - INFO - Evaluation took 7.93s seconds
+2025-06-08 20:26:26 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:26 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:26 - analysis.kg_embeddings - INFO - Found pre-trained model for 'TransR_dim_256'. Loading from: data/analysis/model_embeddings/comparison_run/TransR_dim_256
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:03<00:00, 2.06ktriple/s]
+2025-06-08 20:26:30 - pykeen.evaluation.evaluator - INFO - Evaluation took 3.97s seconds
+2025-06-08 20:26:30 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:30 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:30 - analysis.kg_embeddings - INFO - Found pre-trained model for 'DistMult_dim_256'. Loading from: data/analysis/model_embeddings/comparison_run/DistMult_dim_256
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:03<00:00, 2.17ktriple/s]
+2025-06-08 20:26:34 - pykeen.evaluation.evaluator - INFO - Evaluation took 3.79s seconds
+2025-06-08 20:26:34 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:26:34 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:26:34 - analysis.kg_embeddings - INFO - Found pre-trained model for 'RotatE_dim_256'. Loading from: data/analysis/model_embeddings/comparison_run/RotatE_dim_256
+Evaluating on cuda:0: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [03:16<00:00, 39.7triple/s]
+2025-06-08 20:29:51 - pykeen.evaluation.evaluator - INFO - Evaluation took 196.96s seconds
+2025-06-08 20:29:51 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:29:51 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:29:51 - analysis.kg_embeddings - INFO - Found pre-trained model for 'ComplEx_dim_256'. Loading from: data/analysis/model_embeddings/comparison_run/ComplEx_dim_256
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:00<00:00, 7.95ktriple/s]
+2025-06-08 20:29:53 - pykeen.evaluation.evaluator - INFO - Evaluation took 1.16s seconds
+2025-06-08 20:29:53 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=False) ---
+2025-06-08 20:29:53 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:29:53 - analysis.kg_embeddings - INFO - Found pre-trained model for 'RGCN_dim_256'. Loading from: data/analysis/model_embeddings/comparison_run/RGCN_dim_256
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:03<00:00, 2.04ktriple/s]
+2025-06-08 20:29:57 - pykeen.evaluation.evaluator - INFO - Evaluation took 4.01s seconds
+2025-06-08 20:29:57 - analysis.kg_embeddings - INFO - --- Data Preparation (create_inverse_triples=True) ---
+2025-06-08 20:29:57 - pykeen.triples.splitting - INFO - done splitting triples to groups of sizes [33173, 7813, 7813]
+2025-06-08 20:29:57 - analysis.kg_embeddings - INFO - Found pre-trained model for 'CompGCN_dim_256'. Loading from: data/analysis/model_embeddings/comparison_run/CompGCN_dim_256
+Evaluating on cuda:0: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 7.81k/7.81k [00:03<00:00, 1.96ktriple/s]
+2025-06-08 20:30:02 - pykeen.evaluation.evaluator - INFO - Evaluation took 4.17s seconds
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - 
+--- Comparing Model Performance ---
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransH_dim_128.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransE_dim_64.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransH_dim_64.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransR_dim_64.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for DistMult_dim_64.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for RotatE_dim_64.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for ComplEx_dim_64.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for RGCN_dim_64.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for CompGCN_dim_64.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransE_dim_128.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransR_dim_128.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for DistMult_dim_128.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for RotatE_dim_128.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for ComplEx_dim_128.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for RGCN_dim_128.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for CompGCN_dim_128.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransE_dim_256.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransH_dim_256.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransR_dim_256.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for DistMult_dim_256.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for RotatE_dim_256.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for ComplEx_dim_256.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for RGCN_dim_256.
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Successfully processed metrics for CompGCN_dim_256.
+
+
+==================== Final Model Comparison ====================
+Metric             IHMR  Hits@1  Hits@3  Hits@5  Hits@10
+Experiment                                              
+TransH (d=128)   0.3107  0.3060  0.3098  0.3119   0.3159
+TransH (d=256)   0.3094  0.3045  0.3088  0.3103   0.3138
+TransH (d=64)    0.3062  0.3005  0.3054  0.3069   0.3115
+DistMult (d=256) 0.3037  0.2726  0.3154  0.3344   0.3648
+DistMult (d=128) 0.3009  0.2666  0.3170  0.3403   0.3652
+RotatE (d=256)   0.2289  0.2036  0.2349  0.2526   0.2687
+RGCN (d=128)     0.2257  0.1469  0.2999  0.3048   0.3124
+RGCN (d=256)     0.2146  0.1569  0.3072  0.3108   0.3174
+RGCN (d=64)      0.2043  0.1486  0.2715  0.3028   0.3097
+RotatE (d=128)   0.2027  0.1668  0.2232  0.2368   0.2515
+CompGCN (d=256)  0.1946  0.1661  0.1960  0.2091   0.2333
+CompGCN (d=128)  0.1818  0.1539  0.1857  0.1987   0.2230
+RotatE (d=64)    0.1371  0.0943  0.1471  0.1725   0.2335
+DistMult (d=64)  0.0930  0.0523  0.1165  0.1330   0.1570
+TransE (d=256)   0.0868  0.0003  0.1716  0.1935   0.2120
+TransE (d=128)   0.0855  0.0004  0.1581  0.1864   0.2120
+TransR (d=128)   0.0599  0.0059  0.1078  0.1091   0.1113
+CompGCN (d=64)   0.0596  0.0202  0.0497  0.0793   0.1399
+TransR (d=64)    0.0591  0.0216  0.1201  0.1244   0.1318
+TransE (d=64)    0.0435  0.0004  0.0724  0.0912   0.1124
+TransR (d=256)   0.0047  0.0020  0.0038  0.0056   0.0081
+ComplEx (d=128)  0.0043  0.0009  0.0025  0.0040   0.0074
+ComplEx (d=256)  0.0022  0.0003  0.0009  0.0013   0.0029
+ComplEx (d=64)   0.0004  0.0001  0.0001  0.0002   0.0004
+2025-06-08 20:30:02 - analysis.kg_embeddings - INFO - Comparison heatmap saved to: data/analysis/model_embeddings/comparison_run/model_comparison_heatmap.png
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_embeddings.py:139: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show(block=False)
+2025-06-08 20:30:04 - analysis.kg_embeddings - INFO - Faceted comparison bar plot saved to: data/analysis/model_embeddings/comparison_run/model_comparison_faceted_barplot.png
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_embeddings.py:177: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show(block=False)
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_embeddings.py:245: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.pause(1)
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - 
+--- Comparing Model Performance ---
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransH_dim_128.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransE_dim_64.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransH_dim_64.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransR_dim_64.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for DistMult_dim_64.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for RotatE_dim_64.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for ComplEx_dim_64.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for RGCN_dim_64.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for CompGCN_dim_64.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransE_dim_128.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransR_dim_128.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for DistMult_dim_128.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for RotatE_dim_128.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for ComplEx_dim_128.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for RGCN_dim_128.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for CompGCN_dim_128.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransE_dim_256.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransH_dim_256.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for TransR_dim_256.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for DistMult_dim_256.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for RotatE_dim_256.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for ComplEx_dim_256.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for RGCN_dim_256.
+2025-06-08 20:30:05 - analysis.kg_embeddings - INFO - Successfully processed metrics for CompGCN_dim_256.
+
+
+==================== Final Model Comparison ====================
+Metric             IHMR  Hits@1  Hits@3  Hits@5  Hits@10
+Experiment                                              
+TransH (d=128)   0.3107  0.3060  0.3098  0.3119   0.3159
+TransH (d=256)   0.3094  0.3045  0.3088  0.3103   0.3138
+TransH (d=64)    0.3062  0.3005  0.3054  0.3069   0.3115
+DistMult (d=256) 0.3037  0.2726  0.3154  0.3344   0.3648
+DistMult (d=128) 0.3009  0.2666  0.3170  0.3403   0.3652
+RotatE (d=256)   0.2289  0.2036  0.2349  0.2526   0.2687
+RGCN (d=128)     0.2257  0.1469  0.2999  0.3048   0.3124
+RGCN (d=256)     0.2146  0.1569  0.3072  0.3108   0.3174
+RGCN (d=64)      0.2043  0.1486  0.2715  0.3028   0.3097
+RotatE (d=128)   0.2027  0.1668  0.2232  0.2368   0.2515
+CompGCN (d=256)  0.1946  0.1661  0.1960  0.2091   0.2333
+CompGCN (d=128)  0.1818  0.1539  0.1857  0.1987   0.2230
+RotatE (d=64)    0.1371  0.0943  0.1471  0.1725   0.2335
+DistMult (d=64)  0.0930  0.0523  0.1165  0.1330   0.1570
+TransE (d=256)   0.0868  0.0003  0.1716  0.1935   0.2120
+TransE (d=128)   0.0855  0.0004  0.1581  0.1864   0.2120
+TransR (d=128)   0.0599  0.0059  0.1078  0.1091   0.1113
+CompGCN (d=64)   0.0596  0.0202  0.0497  0.0793   0.1399
+TransR (d=64)    0.0591  0.0216  0.1201  0.1244   0.1318
+TransE (d=64)    0.0435  0.0004  0.0724  0.0912   0.1124
+TransR (d=256)   0.0047  0.0020  0.0038  0.0056   0.0081
+ComplEx (d=128)  0.0043  0.0009  0.0025  0.0040   0.0074
+ComplEx (d=256)  0.0022  0.0003  0.0009  0.0013   0.0029
+ComplEx (d=64)   0.0004  0.0001  0.0001  0.0002   0.0004
+2025-06-08 20:30:06 - analysis.kg_embeddings - INFO - Comparison heatmap saved to: data/analysis/model_embeddings/comparison_run/model_comparison_heatmap.png
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_embeddings.py:139: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show(block=False)
+2025-06-08 20:30:08 - analysis.kg_embeddings - INFO - Faceted comparison bar plot saved to: data/analysis/model_embeddings/comparison_run/model_comparison_faceted_barplot.png
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_embeddings.py:177: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show(block=False)
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_embeddings.py:245: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.pause(1)
+
+---------------------------------------- Running Rent Prediction Model ----------------------------------------
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - Rent Prediction Pipeline Initialized.
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO -   Using embeddings from: TransH_dim_128
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO -   Target variable: avg_monthly_rent
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - ==================================================
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - === Starting Rent Prediction Pipeline (w/ KG Embeddings) ===
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - ==================================================
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - Loading main data from Delta table: data/exploitation/municipal_annual
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - Loaded 14444 rows of main data.
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - Loading embeddings for experiment: TransH_dim_128
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - Loaded and processed 947 entity embeddings.
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - Merging main data with embeddings...
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - Merged DataFrame shape: (14444, 150)
+2025-06-08 20:30:09 - analysis.kg_prediction - INFO - --- Step 2: Feature Engineering ---
+2025-06-08 20:30:10 - analysis.kg_prediction - INFO - Time-based features created.
+2025-06-08 20:30:10 - analysis.kg_prediction - INFO - --- Step 3: Preprocessing and Splitting Data ---
+2025-06-08 20:30:10 - analysis.kg_prediction - INFO - Dropped 966 rows due to missing target or lag1.
+2025-06-08 20:30:10 - analysis.kg_prediction - INFO - Total features for model: 154
+2025-06-08 20:30:10 - analysis.kg_prediction - INFO - Data split complete: Train=(11787, 154), Val=(838, 154), Test=(853, 154)
+2025-06-08 20:30:10 - analysis.kg_prediction - INFO - Numeric features scaled and scaler saved.
+2025-06-08 20:30:10 - analysis.kg_prediction - INFO - --- Step 4: Training LightGBM Model ---
+2025-06-08 20:30:10 - analysis.kg_prediction - INFO - Step 4a: Finding best iteration using validation set...
+Training until validation scores don't improve for 100 rounds
+Early stopping, best iteration is:
+[1187]  valid_0's l1: 76.7009
+2025-06-08 20:30:17 - analysis.kg_prediction - INFO - Optimal number of iterations found: 1187
+2025-06-08 20:30:17 - analysis.kg_prediction - INFO - Step 4b: Retraining final model on combined train+validation data...
+2025-06-08 20:30:42 - analysis.kg_prediction - INFO - Final model has been retrained on all available data (excluding test set).
+2025-06-08 20:30:42 - analysis.kg_prediction - INFO - Model saved to: models/rent_predictor_lgbm.joblib
+2025-06-08 20:30:42 - analysis.kg_prediction - INFO - --- Step 5: Evaluating Model on Test Set ---
+2025-06-08 20:30:42 - analysis.kg_prediction - INFO -   R-squared (R²): 0.7284
+2025-06-08 20:30:42 - analysis.kg_prediction - INFO -   Mean Absolute Error (MAE): 69.81 €
+2025-06-08 20:30:42 - analysis.kg_prediction - INFO -   Root Mean Squared Error (RMSE): 102.69 €
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_prediction.py:269: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show(block=False)
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_prediction.py:278: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show(block=False)
+2025-06-08 20:30:42 - analysis.kg_prediction - INFO - Prediction metrics saved to: data/analysis/rent_prediction_model/prediction_results.json
+/home/cai/gia/bda/large-scale-data-engineering-ai/src/analysis/kg_prediction.py:291: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.pause(1)
+2025-06-08 20:30:43 - analysis.kg_prediction - INFO - === Pipeline Execution Successfully Completed ===
+
+====================================================================================================
+PIPELINE ENDED
+====================================================================================================
+Spark Session stopped.
+2025-06-08 20:30:44 - py4j.clientserver - INFO - Closing down clientserver connection

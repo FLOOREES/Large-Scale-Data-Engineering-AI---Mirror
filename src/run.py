@@ -61,32 +61,32 @@ if __name__ == "__main__":
 					}
 				"""
 			},
-			# {
-			# 	'name': "Complex: Girona Province Neighbors of Populous Towns with Cheap Rent",
-			# 	'sparql': """
-			# 		PREFIX proj: <http://example.com/catalonia-ontology/>
-			# 		PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-			# 		PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-			# 		SELECT DISTINCT ?municipality_name ?avg_rent ?neighbor_name ?neighbor_population
-			# 		WHERE {
-			# 		  ?province rdfs:label "Girona"@ca .
-			# 		  ?comarca proj:isInProvince ?province .
-			# 		  ?mun proj:isInComarca ?comarca ;
-			# 			   rdfs:label ?municipality_name .
-			# 		  ?mun proj:isNeighborOf ?neighbor_mun .
-			# 		  ?neighbor_mun rdfs:label ?neighbor_name .
-			# 		  ?neighbor_mun proj:hasObservation ?pop_obs .
-			# 		  ?pop_obs proj:field <http://example.com/catalonia-ontology/indicator/population> ;
-			# 				   proj:value ?neighbor_population .
-			# 		  FILTER(?neighbor_population > 20000)
-			# 		  ?mun proj:hasAnnualData ?data_point .
-			# 		  ?data_point proj:referenceYear "2021"^^xsd:gYear ;
-			# 					  proj:avgMonthlyRent ?avg_rent .
-			# 		  FILTER(?avg_rent < 700)
-			# 		}
-			# 		ORDER BY ?municipality_name
-			# 	"""
-			# }
+			{
+				'name': "Complex: Girona Province Neighbors of Populous Towns with Cheap Rent",
+				'sparql': """
+					PREFIX proj: <http://example.com/catalonia-ontology/>
+					PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+					PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+					SELECT DISTINCT ?municipality_name ?avg_rent ?neighbor_name ?neighbor_population
+					WHERE {
+					  ?province rdfs:label "Girona"@ca .
+					  ?comarca proj:isInProvince ?province .
+					  ?mun proj:isInComarca ?comarca ;
+						   rdfs:label ?municipality_name .
+					  ?mun proj:isNeighborOf ?neighbor_mun .
+					  ?neighbor_mun rdfs:label ?neighbor_name .
+					  ?neighbor_mun proj:hasObservation ?pop_obs .
+					  ?pop_obs proj:field <http://example.com/catalonia-ontology/indicator/population> ;
+							   proj:value ?neighbor_population .
+					  FILTER(?neighbor_population > 20000)
+					  ?mun proj:hasAnnualData ?data_point .
+					  ?data_point proj:referenceYear "2021"^^xsd:gYear ;
+								  proj:avgMonthlyRent ?avg_rent .
+					  FILTER(?avg_rent < 700)
+					}
+					ORDER BY ?municipality_name
+				"""
+			}
 		]
 	}
 
@@ -107,6 +107,30 @@ if __name__ == "__main__":
 	kg_embeddings_config = {
 		'model_configs': [
 			{'name': 'TransH', 'dim': 128},
+			{'name': 'TransE', 'dim': 64},
+			{'name': 'TransH', 'dim': 64},
+			{'name': 'TransR', 'dim': 64},
+			{'name': 'DistMult', 'dim': 64},
+			{'name': 'RotatE', 'dim': 64},
+			{'name': 'ComplEx', 'dim': 64},
+			{'name': 'RGCN', 'dim': 64},
+			{'name': 'CompGCN', 'dim': 64},
+			{'name': 'TransE', 'dim': 128},
+			{'name': 'TransH', 'dim': 128},
+			{'name': 'TransR', 'dim': 128},
+			{'name': 'DistMult', 'dim': 128},
+			{'name': 'RotatE', 'dim': 128},
+			{'name': 'ComplEx', 'dim': 128},
+			{'name': 'RGCN', 'dim': 128},
+			{'name': 'CompGCN', 'dim': 128},
+			{'name': 'TransE', 'dim': 256},
+			{'name': 'TransH', 'dim': 256},
+			{'name': 'TransR', 'dim': 256},
+			{'name': 'DistMult', 'dim': 256},
+			{'name': 'RotatE', 'dim': 256},
+			{'name': 'ComplEx', 'dim': 256},
+			{'name': 'RGCN', 'dim': 256},
+			{'name': 'CompGCN', 'dim': 256}
 		],
 		'epochs': 300, # High because early stopping is implemented
 		'batch_size': 64,
@@ -136,7 +160,7 @@ if __name__ == "__main__":
 		)
 	
 	pipeline = Pipeline(
-		start_stage=5,
+		start_stage=1,
 		max_stage=5,
 		analysis_parts=analysis_parts_to_run,
 		kg_query_config=kg_query_config,

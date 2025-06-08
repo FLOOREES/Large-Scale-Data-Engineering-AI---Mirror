@@ -5,8 +5,6 @@ from typing import List, Dict, Any
 import pandas as pd
 
 from spark_session import get_spark_session
-# The specific pipeline component classes will be imported and instantiated
-# inside the run method to ensure they are only created when needed.
 from landing.landing import LandingZone
 from formatted.formatted import FormattedZone
 from trusted.trusted import TrustedZone
