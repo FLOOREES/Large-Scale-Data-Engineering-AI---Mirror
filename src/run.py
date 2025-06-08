@@ -31,7 +31,7 @@ if __name__ == "__main__":
     # analysis_parts: A list containing any of "embeddings", "query", "prediction"
     
     pipeline = Pipeline(
-        start_stage=5,
+        start_stage=2,
         max_stage=5,
         analysis_parts=["prediction"], # Run only the final prediction model
         kg_embeddings_config=kg_embeddings_config,

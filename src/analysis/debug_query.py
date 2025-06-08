@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
         for question, query in test_suite.items():
             print(f"\n{'='*10} Answering: '{question}' {'='*10}")
-            results_df = query_pipeline.run_query(sparql_query=query)
+            results_df = query_pipeline.run(sparql_query=query)
 
             print("\n--- Results ---")
             if results_df.empty:
