@@ -1,18 +1,10 @@
 """Main file to run the entire pipeline of the project."""
 
-from spark_session import get_spark_session
 from setup import make_folder_structure
-import geo_relations
-
 from pipeline import Pipeline
 
 if __name__ == "__main__":
 	make_folder_structure()
-	spark = get_spark_session()
-
-	# Generate geographic relations
-	geo_relations.main()
-
 	# Stages:
 	# 1. Landing Zone
 	# 2. Formatted Zone
@@ -20,5 +12,18 @@ if __name__ == "__main__":
 	# 4. Exploitation Zone
 	# 5. Analysis (model, visualizer, or both)
 
-	pipeline = Pipeline(spark=spark, start_stage=4, max_stage=4, analysis="both")
+
+	experiments_to_run = [
+        {'name': 'TransE', 'dim': 64},
+    ]
+
+	kg_embeddings_config = {
+		'model_configs': experiments_to_run,
+		'epochs': 1,
+		'batch_size': 512,
+		'force_training': False,
+		'create_plots_in_run': True,
+	}
+
+	pipeline = Pipeline(start_stage=5, max_stage=5, analysis="embeddings", kg_embeddings_config=kg_embeddings_config)
 	pipeline.run()

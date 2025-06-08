@@ -9,8 +9,7 @@ def make_folder_structure():
         "data/formatted",
         "data/trusted",
         "data/exploitation/municipal_annual",
-        "data/analysis/visualizer",
-        "data/analysis/model",
+        "data/analysis",
     ]
 
     for folder in folders:
