@@ -148,22 +148,18 @@ class RentPredictionPipeline:
         self.features = [f for f in self.features if f in df.columns]
         logger.info(f"Total features for model: {len(self.features)}")
         
-        # --- Time-based Split (Corrected Logic) ---
+        # --- Time-based Split ---
         if df[self.time_col].nunique() < 3:
-            raise ValueError("Not enough unique years in the data to perform a train-validation-test split.")
+            raise ValueError("Not enough unique years for train-val-test split.")
 
         test_year = df[self.time_col].max()
-        logger.info(f"Assigning latest year ({test_year}) to the test set.")
+        train_val_df = df[df[self.time_col] < test_year].copy()
         test_df = df[df[self.time_col] == test_year].copy()
         
-        train_val_df = df[df[self.time_col] < test_year].copy()
         val_year = train_val_df[self.time_col].max()
-        logger.info(f"Assigning second latest year ({val_year}) to the validation set.")
         val_df = train_val_df[train_val_df[self.time_col] == val_year].copy()
-        
         train_df = train_val_df[train_val_df[self.time_col] < val_year].copy()
-        logger.info(f"Using years before {val_year} for the training set.")
-
+        
         self.X_train, self.y_train = train_df[self.features], train_df[self.target_variable]
         self.X_val, self.y_val = val_df[self.features], val_df[self.target_variable]
         self.X_test, self.y_test = test_df[self.features], test_df[self.target_variable]
@@ -171,7 +167,7 @@ class RentPredictionPipeline:
         logger.info(f"Data split complete: Train={self.X_train.shape}, Val={self.X_val.shape}, Test={self.X_test.shape}")
 
         if self.X_train.empty or self.X_val.empty or self.X_test.empty:
-            raise ValueError("One of the data splits (train, val, or test) is empty. Check data availability.")
+            raise ValueError("One of the data splits is empty.")
 
         # --- Handle Categorical Features ---
         for col in self.categorical_features:
@@ -183,9 +179,12 @@ class RentPredictionPipeline:
         # --- Scale Numeric Features ---
         numeric_cols_to_scale = self.X_train.select_dtypes(include=np.number).columns.tolist()
         self.scaler = StandardScaler()
-        self.X_train.loc[:, numeric_cols_to_scale] = self.scaler.fit_transform(self.X_train[numeric_cols_to_scale])
-        self.X_val.loc[:, numeric_cols_to_scale] = self.scaler.transform(self.X_val[numeric_cols_to_scale])
-        self.X_test.loc[:, numeric_cols_to_scale] = self.scaler.transform(self.X_test[numeric_cols_to_scale])
+        
+        # **FIXED**: Assign scaled values directly to prevent FutureWarning and printing
+        self.X_train[numeric_cols_to_scale] = self.scaler.fit_transform(self.X_train[numeric_cols_to_scale])
+        self.X_val[numeric_cols_to_scale] = self.scaler.transform(self.X_val[numeric_cols_to_scale])
+        self.X_test[numeric_cols_to_scale] = self.scaler.transform(self.X_test[numeric_cols_to_scale])
+        
         joblib.dump(self.scaler, self.models_dir / 'rent_prediction_scaler.joblib')
         logger.info("Numeric features scaled and scaler saved.")
 
